@@ -1,0 +1,12 @@
+import type { Metadata } from "next";
+import { TemplateGallery } from "@/components/gallery/template-gallery";
+
+export const metadata: Metadata = {
+  title: "Resume Template Gallery",
+  description: "Swipe real ATS-safe LaTeX resume templates and edit or AI-match them to a job.",
+  robots: { index: false, follow: false },
+};
+
+export default function GalleryPage() {
+  return <TemplateGallery />;
+}
