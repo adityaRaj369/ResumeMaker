@@ -10,6 +10,7 @@ function NewResumeRedirect() {
   const search = useSearchParams();
   const templateId = search.get("templateId");
   const mode = search.get("mode") || "manual";
+  const source = search.get("source") || "example";
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ function NewResumeRedirect() {
     }
 
     let cancelled = false;
-    createResumeClient(templateId, mode)
+    createResumeClient(templateId, mode, source)
       .then(({ id }) => {
         if (cancelled) return;
         router.replace(`/editor/${id}`);
@@ -34,7 +35,7 @@ function NewResumeRedirect() {
     return () => {
       cancelled = true;
     };
-  }, [templateId, mode, router]);
+  }, [templateId, mode, source, router]);
 
   if (error) {
     return (
@@ -51,7 +52,7 @@ function NewResumeRedirect() {
 
   return (
     <div className="grid h-[calc(100vh-56px)] place-items-center text-sm text-muted-foreground">
-      Opening the template you selected…
+        Opening {source === "blank" ? "a blank" : source === "profile" ? "your" : "the example"} resume…
     </div>
   );
 }

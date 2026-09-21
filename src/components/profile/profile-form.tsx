@@ -21,6 +21,13 @@ const STEPS = [
 
 type Profile = Record<string, unknown>;
 
+const CODING_SOURCES = [
+  { key: "leetcode", label: "LeetCode", placeholder: "https://leetcode.com/u/yourhandle" },
+  { key: "codeforces", label: "Codeforces", placeholder: "https://codeforces.com/profile/yourhandle" },
+  { key: "gfg", label: "GeeksforGeeks", placeholder: "https://geeksforgeeks.org/user/yourhandle" },
+  { key: "codechef", label: "CodeChef", placeholder: "https://codechef.com/users/yourhandle" },
+] as const;
+
 export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
   const queryClient = useQueryClient();
   const { data } = useQuery({
@@ -28,6 +35,7 @@ export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
     queryFn: async () => (await fetch("/api/profile")).json() as Promise<Profile>,
   });
   const [step, setStep] = useState(0);
+  const [finishing, setFinishing] = useState(false);
   const save = useMutation({
     mutationFn: async (payload: Profile) => {
       const res = await fetch("/api/profile", {
@@ -40,6 +48,9 @@ export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: () => {
+      toast.error("A change didn't save", { description: "Your last edit may be lost." });
     },
   });
 
@@ -59,7 +70,9 @@ export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Career profile</p>
       <h1 className="mt-2 font-display text-4xl">Your experience library</h1>
       <p className="mt-2 text-muted-foreground">
-        Fill this once. New resumes and job matches pull from here — we do not invent employers, titles, or metrics.
+        Fill this once. AI job matching only ever rewords what you enter. For a manual template,
+        import this profile from the editor in one click — templates never silently swap in a
+        different person.
       </p>
 
       <div className="mt-8 flex gap-2 overflow-x-auto pb-2">
@@ -129,24 +142,41 @@ export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
             </Field>
             {["SWE", "Data"].includes(String(profile.targetRole)) && (
               <div className="grid gap-4 sm:grid-cols-2">
-                {["leetcode", "codeforces", "gfg", "codechef"].map((key) => (
-                  <Field key={key} label={key}>
+                {CODING_SOURCES.map(({ key, label, placeholder }) => (
+                  <Field key={key} label={label}>
                     <Input
+                      placeholder={placeholder}
                       defaultValue={String((profile.codingProfiles as Record<string, string> | undefined)?.[key] ?? "")}
                       onBlur={async (e) => {
-                        const codingProfiles = { ...((profile.codingProfiles as object) ?? {}), [key]: e.target.value };
+                        const codingProfiles = {
+                          ...((profile.codingProfiles as object) ?? {}),
+                          [key]: e.target.value,
+                        };
                         update({ codingProfiles });
-                        if (e.target.value) {
-                          const res = await fetch("/api/coding-stats", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(codingProfiles),
+                        if (!e.target.value.trim()) return;
+
+                        const res = await fetch("/api/coding-stats", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(codingProfiles),
+                        });
+                        if (!res.ok) {
+                          toast.error("Could not reach the stats service");
+                          return;
+                        }
+                        const data = (await res.json()) as {
+                          codingProfiles: object;
+                          outcomes: { source: string; status: string }[];
+                        };
+                        update({ codingProfiles: data.codingProfiles });
+
+                        const outcome = data.outcomes.find((o) => o.source === key);
+                        if (outcome?.status === "fetched") {
+                          toast.success(`${label} stats imported`);
+                        } else if (outcome) {
+                          toast.message(`Couldn't read ${label} stats`, {
+                            description: "The profile may be private. Enter the numbers manually in the editor.",
                           });
-                          if (res.ok) {
-                            const enriched = await res.json();
-                            update({ codingProfiles: enriched });
-                            toast.success("Tried to fetch public coding stats");
-                          }
                         }
                       }}
                     />
@@ -266,12 +296,27 @@ export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
             <Button onClick={() => setStep((s) => s + 1)}>Continue</Button>
           ) : (
             <Button
-              onClick={() => {
-                toast.success("Profile saved");
-                if (redirectTo) window.location.href = redirectTo;
+              disabled={finishing}
+              onClick={async () => {
+                setFinishing(true);
+                try {
+                  // Fields commit on blur, so flush whatever is still focused first.
+                  (document.activeElement as HTMLElement | null)?.blur();
+                  await new Promise((resolve) => setTimeout(resolve, 60));
+                  const latest = (queryClient.getQueryData(["profile"]) as Profile) ?? profile;
+                  await save.mutateAsync({ ...latest, onboardingStep: step });
+                  toast.success("Profile saved");
+                  if (redirectTo) window.location.href = redirectTo;
+                } catch {
+                  toast.error("Could not save your profile", {
+                    description: "Check your connection and try again.",
+                  });
+                } finally {
+                  setFinishing(false);
+                }
               }}
             >
-              Done
+              {finishing ? "Saving…" : "Done"}
             </Button>
           )}
         </div>

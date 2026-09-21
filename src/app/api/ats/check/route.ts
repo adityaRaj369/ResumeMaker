@@ -34,11 +34,13 @@ export async function POST(request: Request) {
     );
   }
 
+  const provider = getAIProvider();
   let analysis: JdAnalysis;
+  // The fallback provider is rule-based, so only a real model counts as "ai".
   let analysisSource: "ai" | "heuristic" = "heuristic";
   try {
     analysis = await Promise.race([
-      getAIProvider().analyzeJobDescription(jd),
+      provider.analyzeJobDescription(jd),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 12_000)),
     ]);
     // Merge lexicon hits so AI misses still get coverage
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
         new Set([...(analysis.niceToHaveKeywords || []), ...heuristic.niceToHaveKeywords]),
       ),
     };
-    analysisSource = "ai";
+    analysisSource = provider.id === "mock" ? "heuristic" : "ai";
   } catch {
     analysis = analyzeJobDescriptionHeuristic(jd);
   }

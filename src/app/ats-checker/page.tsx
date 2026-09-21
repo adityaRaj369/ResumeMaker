@@ -17,9 +17,10 @@ export const metadata: Metadata = {
 
 export default function AtsCheckerPage() {
   const googleConfigured = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+  const demoConfigured = process.env.AUTH_DEMO_LOGIN === "true";
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <MarketingHeader googleConfigured={googleConfigured} />
+      <MarketingHeader googleConfigured={googleConfigured} demoConfigured={demoConfigured} />
       <AtsCheckerForm />
       <footer className="border-t border-border py-10 text-center text-sm text-muted-foreground">
         Want to build an ATS-safe LaTeX resume next?{" "}

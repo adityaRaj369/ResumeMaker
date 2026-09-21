@@ -8,8 +8,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SignInButton } from "@/components/sign-in-button";
 import { Button } from "@/components/ui/button";
 
-export function MarketingHeader({ googleConfigured = false }: { googleConfigured?: boolean }) {
-  const { data: session } = useSession();
+export function MarketingHeader({
+  googleConfigured = false,
+  demoConfigured = false,
+}: {
+  googleConfigured?: boolean;
+  demoConfigured?: boolean;
+}) {
+  const { data: session, status } = useSession();
 
   return (
     <header className="border-b border-border/80 bg-background/80 backdrop-blur-xl">
@@ -28,13 +34,22 @@ export function MarketingHeader({ googleConfigured = false }: { googleConfigured
             ATS Checker
           </Link>
           <ThemeToggle />
-          {session?.user ? (
+          {status === "loading" ? (
+            <Button size="sm" disabled className="invisible">
+              Sign in
+            </Button>
+          ) : session?.user ? (
             <Button size="sm" asChild>
               <Link href="/gallery">Gallery</Link>
             </Button>
           ) : (
             <Suspense fallback={<Button size="sm">Sign in</Button>}>
-              <SignInButton size="sm" googleConfigured={googleConfigured} callbackUrl="/gallery">
+              <SignInButton
+                size="sm"
+                googleConfigured={googleConfigured}
+                demoConfigured={demoConfigured}
+                callbackUrl="/gallery"
+              >
                 Sign in
               </SignInButton>
             </Suspense>

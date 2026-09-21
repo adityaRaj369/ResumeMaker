@@ -1,14 +1,14 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { toast } from "sonner";
-import { TemplateResumePreview } from "@/components/editor/template-preview";
+
 import { ResumeEditorForm } from "@/components/editor/resume-form";
+import { ResumePdfFrame } from "@/components/resume/resume-pdf-frame";
+import { useResumePdf } from "@/components/resume/use-resume-pdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,57 +16,51 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { exampleResume, isExampleContent } from "@/lib/example-content";
+import { isEmptyResume } from "@/lib/resume-doc/document";
+import { blankResume } from "@/lib/sample-resume";
 import type { ResumeContent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const Monaco = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+type ResumeVersion = { id: string; note?: string | null; createdAt: string };
 
 type ResumePayload = {
   id: string;
   title: string;
   latexSource: string;
   contentJson: ResumeContent;
-  pdfUrl?: string | null;
   templateId?: string;
   template?: {
     id: string;
     slug: string;
     name: string;
-    thumbnailUrl: string;
     category: string;
-    latexSource?: string;
   } | null;
-  versions?: { id: string; note?: string | null; createdAt: string }[];
-  engine?: string;
+  versions?: ResumeVersion[];
 };
 
-type PreviewMode = "live" | "sample" | "pdf";
+type SaveState = "idle" | "saving" | "saved" | "error";
 
-function isRealLatexEngine(engine?: string | null) {
-  return engine === "tectonic" || engine === "latex-service" || engine === "pdflatex";
-}
+const AUTOSAVE_DELAY_MS = 700;
 
 export function ResumeEditor({ resumeId }: { resumeId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { resolvedTheme } = useTheme();
-  const [view, setView] = useState<"form" | "code">("form");
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("live");
-  const [compiling, setCompiling] = useState(false);
-  const [compileEngine, setCompileEngine] = useState<string | null>(null);
-  const [previewTick, setPreviewTick] = useState(0);
-  const [draftContent, setDraftContent] = useState<ResumeContent | null>(null);
-  const [draftLatex, setDraftLatex] = useState<string | null>(null);
-  const [lockedSlug, setLockedSlug] = useState<string | null>(null);
-  const [lockedName, setLockedName] = useState<string | null>(null);
-  const [lockedThumb, setLockedThumb] = useState<string | null>(null);
-  const [lockedTemplateLatex, setLockedTemplateLatex] = useState<string | null>(null);
+
+  const [view, setView] = useState<"form" | "tex">("form");
+  const [draft, setDraft] = useState<ResumeContent | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [narrow, setNarrow] = useState(false);
+  // Bumped whenever the whole document is swapped out, to remount the form so
+  // its field state re-initialises from the new content.
+  const [formKey, setFormKey] = useState(0);
+
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const compileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const didInitialCompile = useRef(false);
+  const pendingContent = useRef<ResumeContent | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 900px)");
@@ -76,7 +70,12 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  const { data: resume, isLoading, isError, error } = useQuery({
+  const {
+    data: resume,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["resume", resumeId],
     queryFn: async () => {
       const res = await fetch(`/api/resumes/${resumeId}`, { cache: "no-store" });
@@ -85,143 +84,157 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
       return data;
     },
     enabled: Boolean(resumeId) && resumeId !== "new",
-    staleTime: 30_000,
-    refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ["templates"],
+    queryFn: async () => {
+      const res = await fetch("/api/templates");
+      const data = await res.json();
+      return Array.isArray(data)
+        ? (data as { id: string; slug: string; name: string }[])
+        : [];
+    },
+  });
+
+  // Seed the draft once per resume. Later swaps (restore, example content,
+  // profile import) set the draft directly; re-running here would overwrite
+  // them with the copy that was fetched on load.
   useEffect(() => {
     if (!resume?.id) return;
-    setDraftContent(resume.contentJson);
-    setDraftLatex(resume.latexSource);
-    if (resume.template?.slug) setLockedSlug(resume.template.slug);
-    if (resume.template?.name) setLockedName(resume.template.name);
-    if (resume.template?.thumbnailUrl) setLockedThumb(resume.template.thumbnailUrl);
-    if (resume.template?.latexSource) setLockedTemplateLatex(resume.template.latexSource);
-    didInitialCompile.current = false;
-    setCompileEngine(null);
-    setPreviewMode("live");
-    setPreviewTick(0);
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setDraft(resume.contentJson);
+    setSaveState("idle");
   }, [resume?.id]);
 
   const save = useMutation({
-    mutationFn: async (payload: Partial<ResumePayload> & { note?: string }) => {
-      if (!resume?.id) return null;
-      const res = await fetch(`/api/resumes/${resume.id}`, {
+    mutationFn: async (payload: {
+      contentJson?: ResumeContent;
+      title?: string;
+      note?: string;
+      templateId?: string;
+    }) => {
+      const res = await fetch(`/api/resumes/${resumeId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      return res.json();
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Could not save");
+      }
+      return (await res.json()) as ResumePayload;
     },
-    onSuccess: () => {
+    onMutate: () => setSaveState("saving"),
+    onSuccess: (updated, payload) => {
+      setSaveState("saved");
+      queryClient.setQueryData(["resume", resumeId], (old: ResumePayload | undefined) =>
+        old ? { ...old, ...updated, template: updated.template ?? old.template } : old,
+      );
       queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      if (payload.templateId && updated.template?.name) {
+        toast.success(`Layout switched to ${updated.template.name}`);
+      }
+    },
+    onError: (err: Error) => {
+      setSaveState("error");
+      toast.error("Changes not saved", { description: err.message });
     },
   });
 
-  const compile = async (opts: {
-    latexSource?: string;
-    contentJson: ResumeContent;
-    reinject?: boolean;
-    silent?: boolean;
-  }) => {
-    if (!resume?.id) return;
-    setCompiling(true);
+  const scheduleSave = useCallback(
+    (content: ResumeContent) => {
+      pendingContent.current = content;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        const next = pendingContent.current;
+        if (next) save.mutate({ contentJson: next, note: "autosave" });
+      }, AUTOSAVE_DELAY_MS);
+    },
+    [save],
+  );
+
+  // Flush pending edits if the tab is closed mid-typing.
+  useEffect(() => {
+    const flush = () => {
+      if (!timer.current || !pendingContent.current) return;
+      clearTimeout(timer.current);
+      timer.current = null;
+      void fetch(`/api/resumes/${resumeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentJson: pendingContent.current, note: "autosave" }),
+        keepalive: true,
+      });
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [resumeId]);
+
+  const templateSlug = resume?.template?.slug;
+  const templateName = resume?.template?.name;
+
+  const pdf = useResumePdf({
+    content: draft,
+    templateSlug,
+    title: resume?.title,
+  });
+
+  const applyContent = (next: ResumeContent) => {
+    setDraft(next);
+    scheduleSave(next);
+  };
+
+  /** Swap the whole document, e.g. example content or a profile import. */
+  const replaceContent = (next: ResumeContent) => {
+    applyContent(next);
+    setFormKey((n) => n + 1);
+  };
+
+  const download = () => {
+    if (!pdf.blob) return;
+    const url = URL.createObjectURL(pdf.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(resume?.title || "resume").replace(/[^\w\- ]+/g, "").trim() || "resume"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const switchTemplate = (templateId: string) => {
+    if (!templateId || templateId === resume?.templateId) return;
+    save.mutate({ templateId });
+  };
+
+  const restore = async (versionId: string) => {
     try {
-      const res = await fetch(`/api/resumes/${resume.id}/compile`, {
+      const res = await fetch(`/api/resumes/${resumeId}/versions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contentJson: opts.contentJson,
-          latexSource: opts.reinject ? undefined : opts.latexSource,
-          reinject: opts.reinject ?? false,
-        }),
+        body: JSON.stringify({ restoreId: versionId }),
       });
-      if (!res.ok) throw new Error("Compile failed");
-      const updated = (await res.json()) as ResumePayload & { engine?: string };
-      setDraftLatex(updated.latexSource);
-      if (updated.engine) setCompileEngine(updated.engine);
-      if (isRealLatexEngine(updated.engine)) {
-        setPreviewTick((n) => n + 1);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Could not restore this version");
       }
-      queryClient.setQueryData(["resume", resume.id], (old: ResumePayload | undefined) => ({
-        ...(old ?? updated),
-        ...updated,
-        template: old?.template ?? updated.template ?? null,
-      }));
-      if (!opts.silent) {
-        if (isRealLatexEngine(updated.engine)) toast.success("LaTeX PDF updated");
-        else toast.message("Saved — live preview is up to date", {
-          description: "Exact PDF needs tectonic, pdflatex, or LATEX_SERVICE_URL.",
-        });
-      }
-    } catch {
-      if (!opts.silent) toast.error("Compile failed");
-    } finally {
-      setCompiling(false);
+      const updated = (await res.json()) as ResumePayload;
+      queryClient.setQueryData(["resume", resumeId], (old: ResumePayload | undefined) =>
+        old ? { ...old, ...updated, template: updated.template ?? old.template } : old,
+      );
+      setDraft(updated.contentJson);
+      setFormKey((n) => n + 1);
+      toast.success("Version restored");
+    } catch (err) {
+      toast.error((err as Error).message);
     }
   };
 
-  const schedule = (opts: { content: ResumeContent; latex?: string; reinject: boolean }) => {
-    if (timer.current) clearTimeout(timer.current);
-    if (compileTimer.current) clearTimeout(compileTimer.current);
-    timer.current = setTimeout(() => {
-      save.mutate({
-        contentJson: opts.content,
-        latexSource: opts.reinject ? undefined : opts.latex,
-        note: "autosave",
-      });
-    }, 650);
-    // Only attempt background compile when a real engine was already detected
-    if (isRealLatexEngine(compileEngine)) {
-      compileTimer.current = setTimeout(() => {
-        compile({
-          contentJson: opts.content,
-          latexSource: opts.latex,
-          reinject: opts.reinject,
-          silent: true,
-        });
-      }, 1200);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-      if (compileTimer.current) clearTimeout(compileTimer.current);
-    };
-  }, []);
-
-  // Probe once for a real TeX engine — silent, no toast spam.
-  useEffect(() => {
-    if (!resume?.id || !draftContent || didInitialCompile.current) return;
-    didInitialCompile.current = true;
-    void compile({
-      contentJson: draftContent,
-      latexSource: draftLatex ?? resume.latexSource,
-      reinject: true,
-      silent: true,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resume?.id, draftContent]);
-
-  const content = draftContent;
-  const latex = draftLatex ?? "";
-  const pdfSrc = resume?.id ? `/api/resumes/${resume.id}/pdf?v=${previewTick}` : "";
-  const templateSlug = lockedSlug || resume?.template?.slug;
-  const templateName = lockedName || resume?.template?.name;
-  const templateThumb = lockedThumb || resume?.template?.thumbnailUrl;
-  const templateLatex = lockedTemplateLatex || resume?.template?.latexSource || "";
-  const hasRealPdf = isRealLatexEngine(compileEngine) && previewTick > 0;
-  const showPdf = previewMode === "pdf" && hasRealPdf;
-  const showSample = previewMode === "sample" && Boolean(templateThumb);
-
-  if (isLoading || !resume || !content) {
+  if (isLoading || !resume || !draft) {
     return (
       <div className="grid min-h-[calc(100dvh-56px)] place-items-center px-4 text-sm text-muted-foreground">
         {isError ? (error as Error)?.message || "Could not open this resume" : "Opening editor…"}
@@ -229,41 +242,22 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
     );
   }
 
+  const versions = resume.versions ?? [];
+  const empty = isEmptyResume(draft);
+
   const previewPane = (
-    <div className="relative h-full min-h-[280px] overflow-auto bg-desk">
-      {compiling && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 overflow-hidden">
-          <div className="shimmer h-full w-full bg-accent/40" />
-        </div>
-      )}
-      <div className="mx-auto w-full max-w-[560px] px-3 py-4 sm:px-4">
-        <div className={cn("overflow-hidden rounded-sm border border-border bg-white", compiling && "opacity-95")}>
-          {showPdf ? (
-            <iframe
-              key={`${resume.id}-${previewTick}`}
-              title="LaTeX resume PDF"
-              src={pdfSrc}
-              className="h-[min(720px,75dvh)] w-full bg-white"
-            />
-          ) : showSample ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={templateThumb!}
-              alt={`${templateName || "Template"} published sample`}
-              className="w-full object-contain object-top"
-            />
-          ) : (
-            <TemplateResumePreview content={content} templateSlug={templateSlug} />
-          )}
-        </div>
+    <div className="h-full min-h-[280px] overflow-auto bg-desk">
+      <div className="mx-auto w-full max-w-[620px] px-3 py-4 sm:px-4">
+        <ResumePdfFrame
+          blob={pdf.blob}
+          rendering={pdf.rendering}
+          error={pdf.error}
+          empty={empty}
+          emptyHint="Fill the form on the right — this is the exact PDF you'll download."
+          pages={3}
+        />
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          {showPdf
-            ? compiling
-              ? "Recompiling LaTeX…"
-              : "Compiled from this template’s real .tex"
-            : showSample
-              ? "Published sample of this template (reference)"
-              : "Live preview — updates as you type on the right"}
+          This is the actual PDF — what you see here is what downloads.
         </p>
       </div>
     </div>
@@ -271,38 +265,36 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
 
   const editorPane = (
     <div className="h-full min-h-[320px] overflow-auto border-border bg-card md:border-l">
-      {view === "code" ? (
-        <Monaco
-          key={resume.id}
-          height="100%"
-          language="plaintext"
-          theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
-          value={latex}
-          onChange={(value) => {
-            const next = value ?? "";
-            setDraftLatex(next);
-            schedule({ content, latex: next, reinject: false });
-          }}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 13,
-            wordWrap: "on",
-            padding: { top: 16 },
-            scrollBeyondLastLine: false,
-          }}
-        />
+      {view === "tex" ? (
+        <div className="space-y-3 p-5">
+          <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            LaTeX export of this resume, generated from your content. Useful if you want to keep
+            editing in Overleaf — it is not what the PDF above is rendered from.
+          </div>
+          <Button variant="secondary" size="sm" asChild>
+            <a href={`/api/resumes/${resume.id}/tex`}>Download .tex</a>
+          </Button>
+          <pre className="max-h-[70dvh] overflow-auto rounded-xl border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
+            {resume.latexSource}
+          </pre>
+        </div>
       ) : (
-        <ResumeEditorForm
-          key={resume.id}
-          content={content}
-          templateLatex={templateLatex}
-          templateName={templateName}
-          onChange={(next) => {
-            setDraftContent(next);
-            if (previewMode !== "live") setPreviewMode("live");
-            schedule({ content: next, reinject: true });
-          }}
-        />
+        <>
+          {isExampleContent(draft) ? (
+            <div className="border-b border-border bg-muted/40 px-5 py-3 text-xs text-muted-foreground">
+              You&apos;re editing the same example shown in the gallery. Use{" "}
+              <span className="font-medium text-foreground">Content → Fill from my career profile</span>{" "}
+              or type over it before you apply.
+            </div>
+          ) : null}
+          <ResumeEditorForm
+            key={`${resume.id}-${formKey}`}
+            content={draft}
+            templateSlug={templateSlug}
+            templateName={templateName}
+            onChange={applyContent}
+          />
+        </>
       )}
     </div>
   );
@@ -315,93 +307,128 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
             key={resume.id}
             className="h-9 max-w-[160px] border-transparent bg-transparent px-2 font-medium shadow-none focus-visible:border-border focus-visible:bg-card sm:max-w-[220px]"
             defaultValue={resume.title}
-            onBlur={(e) => save.mutate({ title: e.target.value })}
+            onBlur={(e) => {
+              const title = e.target.value.trim();
+              if (title && title !== resume.title) save.mutate({ title });
+            }}
           />
           {templateName ? (
-            <span className="hidden truncate rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground sm:inline">
-              {templateName}
-            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="hidden truncate rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground transition hover:border-accent/40 hover:text-foreground sm:inline"
+                >
+                  {templateName}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-72 w-64 overflow-auto">
+                <DropdownMenuLabel>Switch layout — your content stays</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {templates.map((template) => (
+                  <DropdownMenuItem
+                    key={template.id}
+                    disabled={template.id === resume.templateId || template.slug === templateSlug}
+                    onClick={() => switchTemplate(template.id)}
+                  >
+                    {template.name}
+                    {template.slug === templateSlug ? " · current" : ""}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
+          <SaveIndicator state={saveState} />
         </div>
+
         <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-          <Tabs value={view} onValueChange={(v) => setView(v as "form" | "code")}>
+          <Tabs value={view} onValueChange={(v) => setView(v as "form" | "tex")}>
             <TabsList>
               <TabsTrigger value="form">Edit</TabsTrigger>
-              <TabsTrigger value="code">LaTeX</TabsTrigger>
+              <TabsTrigger value="tex">LaTeX</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Tabs
-            value={previewMode === "pdf" && !hasRealPdf ? "live" : previewMode}
-            onValueChange={(v) => {
-              if (v === "pdf" && !hasRealPdf) {
-                toast.message("Exact PDF unavailable yet", {
-                  description: "Install tectonic/pdflatex or set LATEX_SERVICE_URL. Live preview still works.",
-                });
-                setPreviewMode("live");
-                return;
-              }
-              setPreviewMode(v as PreviewMode);
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value="live">Live</TabsTrigger>
-              <TabsTrigger value="sample">Sample</TabsTrigger>
-              <TabsTrigger value="pdf">PDF</TabsTrigger>
-            </TabsList>
-          </Tabs>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="sm" className="hidden sm:inline-flex">
-                Versions
+              <Button variant="ghost" size="sm">
+                Content
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="max-h-64 overflow-auto">
-              {(resume.versions ?? []).length === 0 ? (
+            <DropdownMenuContent align="end" className="w-64">
+              {isExampleContent(draft) ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  This is the gallery example. Replace it before you apply.
+                </p>
+              ) : null}
+              <DropdownMenuItem
+                onClick={async () => {
+                  const res = await fetch("/api/profile", { cache: "no-store" });
+                  if (!res.ok) {
+                    toast.error("Could not read your profile");
+                    return;
+                  }
+                  const profile = (await res.json()) as { content?: ResumeContent; ready?: boolean };
+                  if (!profile.ready || !profile.content) {
+                    toast.message("Your career profile is empty", {
+                      description: "Add your details in Profile first.",
+                    });
+                    return;
+                  }
+                  replaceContent(profile.content);
+                  toast.success("Filled from your career profile");
+                }}
+              >
+                Fill from my career profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  replaceContent(exampleResume());
+                  toast.message("Example content loaded", {
+                    description: "This is sample data — replace it with your own.",
+                  });
+                }}
+              >
+                Reload gallery example
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  replaceContent(blankResume());
+                  toast.message("Cleared to a blank form");
+                }}
+              >
+                Start from a blank form
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="sm">
+                History
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 w-72 overflow-auto">
+              <DropdownMenuLabel>Restore a previous version</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {versions.length === 0 ? (
                 <DropdownMenuItem disabled>No versions yet</DropdownMenuItem>
               ) : (
-                (resume.versions ?? []).map((version) => (
-                  <DropdownMenuItem
-                    key={version.id}
-                    onClick={async () => {
-                      await fetch(`/api/resumes/${resume.id}/versions`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ restoreId: version.id }),
-                      });
-                      setDraftContent(null);
-                      setDraftLatex(null);
-                      queryClient.invalidateQueries({ queryKey: ["resume", resume.id] });
-                      toast.success("Restored version");
-                    }}
-                  >
-                    {version.note || "edit"} · {new Date(version.createdAt).toLocaleString()}
+                versions.map((version) => (
+                  <DropdownMenuItem key={version.id} onClick={() => restore(version.id)}>
+                    <span className="truncate">
+                      {version.note || "edit"} · {new Date(version.createdAt).toLocaleString()}
+                    </span>
                   </DropdownMenuItem>
                 ))
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={compiling}
-            onClick={() =>
-              compile({
-                contentJson: content,
-                latexSource: latex,
-                reinject: view === "form",
-              })
-            }
-          >
-            {compiling ? "…" : "Compile"}
+
+          <Button size="sm" onClick={download} disabled={!pdf.blob || pdf.rendering}>
+            {pdf.rendering && !pdf.blob ? "Preparing…" : "Download PDF"}
           </Button>
-          {hasRealPdf ? (
-            <Button size="sm" asChild className="hidden xs:inline-flex sm:inline-flex">
-              <a href={`/api/resumes/${resume.id}/pdf?download=1&v=${previewTick}`}>Download</a>
-            </Button>
-          ) : null}
-          <Button size="sm" variant="ghost" className="hidden md:inline-flex" asChild>
-            <a href={`/api/resumes/${resume.id}/tex`}>.tex</a>
-          </Button>
+
           <Button size="sm" variant="ghost" onClick={() => router.push("/gallery")}>
             Gallery
           </Button>
@@ -423,5 +450,21 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
         </Panel>
       </Group>
     </div>
+  );
+}
+
+function SaveIndicator({ state }: { state: SaveState }) {
+  if (state === "idle") return null;
+  const label =
+    state === "saving" ? "Saving…" : state === "saved" ? "Saved" : "Not saved";
+  return (
+    <span
+      className={cn(
+        "hidden text-xs sm:inline",
+        state === "error" ? "text-red-600 dark:text-red-400" : "text-muted-foreground",
+      )}
+    >
+      {label}
+    </span>
   );
 }

@@ -7,9 +7,14 @@ export default function NotFound() {
       <div className="max-w-md text-center">
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">404</p>
         <h1 className="mt-2 font-display text-4xl">This page was never compiled.</h1>
-        <Button asChild className="mt-6">
-          <Link href="/gallery">Back to gallery</Link>
-        </Button>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Button asChild>
+            <Link href="/">Back to home</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/templates">Browse templates</Link>
+          </Button>
+        </div>
       </div>
     </div>
   );

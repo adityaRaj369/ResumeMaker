@@ -7,11 +7,24 @@ import { injectLatex } from "@/lib/latex/inject";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { isProfileReady, profileToContent } from "@/lib/resume-content";
 import { requireUser, apiError } from "@/lib/session";
-import { savePdf } from "@/lib/storage";
 import { getTemplateByIdOrSlug } from "@/lib/templates";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+/**
+ * Job posts lead with the role, so the opening line makes a far more useful
+ * resume title than the profile's generic target role. Only that line is
+ * considered — scanning further down picks up responsibility bullets.
+ */
+function roleFromJd(jd: string): string {
+  const first = jd.split("\n").map((value) => value.trim()).find(Boolean) ?? "";
+  if (first.length < 3 || first.length > 60) return "";
+  if (/^[-•*\d]/.test(first)) return "";
+  // Trim a trailing company or location clause: "Backend Engineer — Acme, NYC".
+  const role = first.replace(/\s*[—–|,].*$/, "").trim();
+  return role.split(/\s+/).length <= 8 ? role.slice(0, 48) : "";
+}
 
 export async function POST(request: Request) {
   try {
@@ -53,7 +66,7 @@ export async function POST(request: Request) {
       data: {
         userId: user.id,
         templateId: template.id,
-        title: `${content.targetRole || "Resume"} - ATS - ${month}`,
+        title: `${roleFromJd(body.jd) || content.targetRole || "Resume"} — ${month}`,
         mode: "ats_matched",
         jobDescription: body.jd,
         latexSource,
@@ -85,6 +98,10 @@ export async function POST(request: Request) {
             jd: body.jd,
             profile: content,
             latexTemplate: template.latexSource,
+            templateSlug: template.slug,
+            confirmedKeywords: Array.isArray(body.confirmedKeywords)
+              ? (body.confirmedKeywords as string[])
+              : undefined,
             emit: async (event) => {
               pushJobEvent(jobId, event);
               if (event.type === "step" && event.status === "running") {
@@ -98,14 +115,13 @@ export async function POST(request: Request) {
           timeout(90_000, "AI generation timed out") as Promise<never>,
         ]);
 
-        const pdfUrl = await savePdf(resume.id, result.compiled.pdf);
         await prisma.resume.update({
           where: { id: resume.id },
           data: {
             latexSource: result.latexSource,
             contentJson: result.content as object,
-            pdfUrl,
-            plainText: result.compiled.text,
+            pdfUrl: `/api/resumes/${resume.id}/pdf`,
+            plainText: result.rendered.text,
             atsScore: result.breakdown.score,
             matchedKeywords: {
               matched: result.breakdown.matched,
@@ -131,6 +147,8 @@ export async function POST(request: Request) {
             result: { score: result.breakdown.score } as object,
           },
         });
+        // Only now is the tailored resume readable by the client.
+        pushJobEvent(jobId, { type: "done" });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Generation failed";
         pushJobEvent(jobId, { type: "error", message });

@@ -5,10 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextField } from "@/components/editor/rich-text-field";
-import {
-  formSectionsFromLatex,
-  type FormSectionId,
-} from "@/lib/template-samples";
+import { formSectionsForSlug, type FormSectionId } from "@/lib/resume-doc/theme";
 import type {
   CertificationItem,
   EducationItem,
@@ -20,22 +17,18 @@ import type {
 export function ResumeEditorForm({
   content,
   onChange,
-  templateLatex,
+  templateSlug,
   templateName,
 }: {
   content: ResumeContent;
   onChange: (content: ResumeContent) => void;
-  /** Original template .tex (with {{placeholders}}) — drives which fields appear and in what order. */
-  templateLatex?: string | null;
+  /** Drives which fields appear and in what order, matching the rendered page. */
+  templateSlug?: string | null;
   templateName?: string | null;
 }) {
   const set = (patch: Partial<ResumeContent>) => onChange({ ...content, ...patch });
   const cats = content.skillCategories ?? { languages: [], frameworks: [], tools: [] };
-  const order = templateLatex?.includes("{{")
-    ? formSectionsFromLatex(templateLatex)
-    : formSectionsFromLatex(
-        "{{fullName}}{{summaryBlock}}{{experienceBlock}}{{educationBlock}}{{projectsBlock}}{{skillsBlock}}{{certificationsBlock}}{{codingBlock}}",
-      );
+  const order = formSectionsForSlug(templateSlug);
 
   const setCategory = (key: "languages" | "frameworks" | "tools", raw: string) => {
     const values = raw
@@ -437,6 +430,40 @@ export function ResumeEditorForm({
               }
             />
           </Field>
+          <Field label="GeeksforGeeks solved">
+            <Input
+              type="number"
+              value={coding.stats?.gfgSolved ?? ""}
+              onChange={(e) =>
+                set({
+                  codingProfiles: {
+                    ...coding,
+                    stats: {
+                      ...coding.stats,
+                      gfgSolved: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="CodeChef rating">
+            <Input
+              type="number"
+              value={coding.stats?.codechefRating ?? ""}
+              onChange={(e) =>
+                set({
+                  codingProfiles: {
+                    ...coding,
+                    stats: {
+                      ...coding.stats,
+                      codechefRating: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  },
+                })
+              }
+            />
+          </Field>
         </div>
       </Section>
     ),
@@ -447,11 +474,11 @@ export function ResumeEditorForm({
       <p className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         {templateName ? (
           <>
-            Fields from the published <strong className="text-foreground">{templateName}</strong> sample —
-            already filled so you can edit the same values shown on that resume.
+            Sections are ordered the way <strong className="text-foreground">{templateName}</strong> prints
+            them. Empty sections are left off the page.
           </>
         ) : (
-          <>Fields match this resume sample and are pre-filled for editing.</>
+          <>Empty sections are left off the page.</>
         )}
       </p>
 

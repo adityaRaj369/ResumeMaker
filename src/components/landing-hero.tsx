@@ -1,34 +1,42 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { signIn, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { ArrowRight, FileText, Gauge, PenLine, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TemplateThumbnail } from "@/components/gallery/template-thumbnail";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { canSignIn, safeCallback, startSignIn } from "@/lib/auth-client";
 
 const TEMPLATES = [
-  { src: "/templates/jakes-real.png", name: "Jake's" },
-  { src: "/templates/sb2nov-real.png", name: "sb2nov" },
-  { src: "/templates/deedy-real.png", name: "Deedy" },
-  { src: "/templates/engineeringresumes-real.png", name: "Engineering" },
-  { src: "/templates/moderncv-real.png", name: "ModernCV" },
-  { src: "/templates/harvard-real.png", name: "Harvard" },
+  { slug: "jakes", name: "Jake's" },
+  { slug: "sb2nov", name: "sb2nov" },
+  { slug: "deedy-safe", name: "Deedy" },
+  { slug: "engineeringresumes", name: "Engineering" },
+  { slug: "moderncv", name: "ModernCV" },
+  { slug: "harvard", name: "Harvard" },
 ];
 
-function safeCallback(url: string | null, fallback = "/gallery") {
-  if (!url || !url.startsWith("/") || url.startsWith("//")) return fallback;
-  return url;
+function safeCallbackLocal(url: string | null, fallback = "/gallery") {
+  return safeCallback(url, fallback);
 }
 
-export function LandingHero({ googleConfigured }: { googleConfigured: boolean }) {
+export function LandingHero({
+  googleConfigured,
+  demoConfigured,
+}: {
+  googleConfigured: boolean;
+  demoConfigured: boolean;
+}) {
   const search = useSearchParams();
   const router = useRouter();
   const { data: session, status } = useSession();
-  const from = safeCallback(search.get("from"));
+  const from = safeCallbackLocal(search.get("from"));
   const needsContinue = Boolean(search.get("from"));
+  const authReady = canSignIn(googleConfigured, demoConfigured);
 
   useEffect(() => {
     if (status === "authenticated" && search.get("from")) {
@@ -36,7 +44,7 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
     }
   }, [status, search, from, router]);
 
-  const start = () => signIn(googleConfigured ? "google" : "demo", { callbackUrl: from });
+  const start = () => startSignIn({ googleConfigured, demoConfigured, callbackUrl: from });
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
@@ -71,13 +79,21 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               ATS Checker
             </Link>
             <ThemeToggle />
-            {session?.user ? (
+            {status === "loading" ? (
+              <Button size="sm" className="ml-1 invisible" disabled>
+                Sign in
+              </Button>
+            ) : session?.user ? (
               <Button size="sm" className="ml-1" asChild>
                 <Link href="/gallery">Open gallery</Link>
               </Button>
-            ) : (
+            ) : authReady ? (
               <Button size="sm" className="ml-1" onClick={start}>
                 Sign in
+              </Button>
+            ) : (
+              <Button size="sm" className="ml-1" variant="outline" asChild>
+                <Link href="/templates">Browse templates</Link>
               </Button>
             )}
           </nav>
@@ -89,9 +105,15 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
           <div className="mx-auto w-full max-w-6xl px-6 pt-4 sm:px-8">
             <div className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm">
               Sign in to continue to <span className="font-medium text-foreground">{from}</span>
-              <Button size="sm" className="ml-3" onClick={start}>
-                Continue <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
+              {authReady ? (
+                <Button size="sm" className="ml-3" onClick={start}>
+                  Continue <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <span className="ml-2 text-muted-foreground">
+                  Auth is not configured on this server.
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -119,8 +141,8 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               transition={{ delay: 0.08 }}
               className="mt-4 text-lg leading-relaxed text-muted-foreground"
             >
-              Write once, tailor per job, export a PDF that applicant tracking systems can actually parse — without
-              inventing experience.
+              Write once, tailor per job, export the PDF you see in the editor. Job matching
+              rewrites only what you already have.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -134,10 +156,16 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
                     Open template gallery <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
-              ) : (
+              ) : authReady ? (
                 <Button size="lg" onClick={start}>
                   {needsContinue ? "Sign in to continue" : "Create my resume"}{" "}
                   <ArrowRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button size="lg" asChild>
+                  <Link href="/templates">
+                    Browse templates <ArrowRight className="h-4 w-4" />
+                  </Link>
                 </Button>
               )}
               <Button size="lg" variant="outline" asChild>
@@ -169,13 +197,8 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               aria-hidden
               className="absolute right-[4%] top-4 hidden h-[90%] w-[78%] rotate-[5deg] rounded-sm bg-card opacity-50 shadow-lg lg:block"
             />
-            <div className="paper-shadow relative z-10 overflow-hidden rounded-sm border border-border/60 bg-white">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/templates/jakes-real.png"
-                alt="Example resume built with ResumeForge"
-                className="aspect-[8.5/11] w-full object-cover object-top"
-              />
+            <div className="paper-shadow relative z-10 overflow-hidden rounded-sm">
+              <TemplateThumbnail slug="jakes" name="Jake's Resume" eager />
             </div>
           </motion.div>
         </section>
@@ -197,20 +220,14 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               </Button>
             </div>
             <div className="mt-8 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {TEMPLATES.map((t, i) => (
+              {TEMPLATES.map((t) => (
                 <Link
-                  key={t.src}
-                  href="/templates"
+                  key={t.slug}
+                  href={`/templates/${t.slug}`}
                   className="group w-[140px] shrink-0 sm:w-[160px]"
-                  style={{ animationDelay: `${i * 40}ms` }}
                 >
-                  <div className="paper-shadow overflow-hidden rounded-sm border border-border bg-desk transition duration-300 group-hover:-translate-y-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={t.src}
-                      alt={t.name}
-                      className="aspect-[8.5/11] w-full object-cover object-top"
-                    />
+                  <div className="paper-shadow overflow-hidden rounded-sm transition duration-300 group-hover:-translate-y-1">
+                    <TemplateThumbnail slug={t.slug} name={t.name} />
                   </div>
                   <p className="mt-2 text-center text-xs text-muted-foreground group-hover:text-foreground">
                     {t.name}
@@ -230,8 +247,8 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               {[
                 {
                   n: "1",
-                  title: "Fill your profile",
-                  body: "Contact, skills, roles, education, and projects live in one place and reuse across every version.",
+                  title: "Fill your profile once",
+                  body: "Contact, skills, roles, education, and projects live in one place. Use them for AI matching, or import them into any template in one click.",
                 },
                 {
                   n: "2",
@@ -267,13 +284,13 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               {[
                 {
                   icon: FileText,
-                  title: "Real LaTeX, real PDF",
-                  body: "Single-column templates that compile to text recruiters and parsers can read — not a decorative image.",
+                  title: "What you see is the file",
+                  body: "The editor preview is the downloaded PDF, rendered from the template you picked. Export .tex too if you want to finish in Overleaf.",
                 },
                 {
                   icon: PenLine,
                   title: "Live editor",
-                  body: "Add experience, education, projects, and certifications. Preview updates as you type; compile when ready.",
+                  body: "Add experience, education, projects, and certifications. The page re-renders as you type — no compile step.",
                 },
                 {
                   icon: Sparkles,
@@ -282,8 +299,8 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
                 },
                 {
                   icon: Gauge,
-                  title: "Clear ATS score",
-                  body: "See matched keywords, missing must-haves, section coverage, and formatting risks — with fixes you can apply.",
+                  title: "Clear keyword score",
+                  body: "Matched keywords, missing must-haves, section coverage, and formatting risks — our own analysis, not a vendor ATS score.",
                 },
               ].map((item) => (
                 <div key={item.title} className="flex gap-4">
@@ -329,9 +346,17 @@ export function LandingHero({ googleConfigured }: { googleConfigured: boolean })
               Sign in, choose a layout, and fill in your experience. Export when it looks right.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Button size="lg" onClick={start}>
-                Create my resume <ArrowRight className="h-4 w-4" />
-              </Button>
+              {session?.user ? (
+                <Button size="lg" asChild>
+                  <Link href="/gallery">
+                    Open gallery <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              ) : authReady ? (
+                <Button size="lg" onClick={start}>
+                  Create my resume <ArrowRight className="h-4 w-4" />
+                </Button>
+              ) : null}
               <Button size="lg" variant="outline" asChild>
                 <Link href="/templates">Browse templates</Link>
               </Button>

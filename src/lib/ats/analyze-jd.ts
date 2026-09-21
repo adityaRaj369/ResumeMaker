@@ -44,11 +44,13 @@ export function analyzeJobDescriptionHeuristic(jd: string): JdAnalysis {
     return lower.includes(n);
   });
 
-  // Capitalized multi-word phrases often signal tools/products in JDs
-  const phraseHits = Array.from(text.matchAll(/\b([A-Z][A-Za-z0-9+#./-]{1,}(?:\s+[A-Z][A-Za-z0-9+#./-]{1,}){0,3})\b/g))
+  // Capitalized phrases often name tools or products. Kept to a single line so
+  // a heading never joins the sentence under it ("Razorpay" + "About the role").
+  const phraseHits = Array.from(
+    text.matchAll(/\b([A-Z][A-Za-z0-9+#./-]{1,}(?:[ \t]+[A-Z][A-Za-z0-9+#./-]{1,}){0,3})\b/g),
+  )
     .map((m) => m[1].trim())
-    .filter((p) => p.length >= 2 && p.length <= 40)
-    .filter((p) => !/^(The|And|Or|With|For|Our|You|We|This|That|Will|Are|Is)$/i.test(p));
+    .filter(isUsefulKeyword);
 
   const mustSection = sliceSection(text, /(requirements|must[- ]have|what you.?ll need|qualifications|required)/i);
   const niceSection = sliceSection(text, /(nice[- ]to[- ]have|preferred|bonus|good to have)/i);
@@ -123,6 +125,45 @@ function escapeReg(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Headings and boilerplate that read like requirements but name no skill. */
+const BOILERPLATE =
+  /^(must|nice|good|requirements?|qualifications?|responsibilities|preferred|bonus|benefits|about|the role|what you.?ll (do|need)|who you are|we offer|apply|location|salary|compensation|equal opportunity)\b/i;
+
+/** Words that carry no signal on their own, however they are capitalised. */
+const FILLER_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "building", "but", "by", "can", "day", "design", "do",
+  "experience", "for", "from", "have", "in", "is", "it", "look", "looking", "of", "on", "or", "our",
+  "role", "ship", "skills", "strong", "team", "teams", "that", "the", "them", "this", "to", "up",
+  "we", "will", "with", "work", "working", "you", "your", "years", "plus", "must", "nice", "good",
+  "great", "excellent", "ability", "able", "help", "join", "hiring", "used", "using", "across",
+]);
+
+const LEXICON_LOOKUP = new Set(SKILL_LEXICON.map((s) => normalizeKeyword(s)));
+
+/**
+ * Keeps candidates a reader would recognise as a requirement.
+ *
+ * JD prose is full of capitalised sentence starts ("Strong", "Must"), so a
+ * candidate has to be a known skill, look like a technical token, or be a
+ * multi-word phrase that is not all filler.
+ */
+function isUsefulKeyword(raw: string): boolean {
+  const value = raw.replace(/[:.,;]+$/, "").trim();
+  if (value.length < 2 || value.length > 40) return false;
+  if (BOILERPLATE.test(value)) return false;
+  if (LEXICON_LOOKUP.has(normalizeKeyword(value))) return true;
+
+  const words = value.split(/\s+/);
+  if (words.every((w) => FILLER_WORDS.has(w.toLowerCase()))) return false;
+
+  if (words.length === 1) {
+    // A lone word only counts if it looks like a technical token: an acronym
+    // or something carrying punctuation/digits, e.g. SQL, CI/CD, Next.js, S3.
+    return /^[A-Z0-9]{2,}$/.test(value) || /[0-9+#./]/.test(value);
+  }
+  return true;
+}
+
 function sliceSection(text: string, heading: RegExp): string {
   const match = heading.exec(text);
   if (!match || match.index == null) return "";
@@ -138,23 +179,67 @@ function sliceSection(text: string, heading: RegExp): string {
   return rest.slice(0, 1200);
 }
 
+/** Lead-ins that wrap a requirement without being part of the skill itself. */
+const LEAD_IN =
+  /^(\d+\+?\s*years?(\s+of)?(\s+\w+)?\s+(with|in|using)|experience\s+(with|in)|proficien(t|cy)\s+(with|in)|familiarity\s+with|knowledge\s+of|understanding\s+of|strong|solid|deep|hands[- ]on(\s+experience)?(\s+with)?|background\s+in|exposure\s+to)\s+/i;
+
+function tidyItem(raw: string): string {
+  return raw
+    .replace(/^[\s•\-*–—]+/, "")
+    // Ordered-list numbering only; a bare "5+ years…" keeps its number so the
+    // lead-in below can recognise and strip the whole phrase.
+    .replace(/^\d+[.)]\s+/, "")
+    .replace(/\s+/g, " ")
+    .replace(LEAD_IN, "")
+    .replace(/^[\s•\-*–—]+/, "")
+    .replace(/[:.,;]+$/, "")
+    .trim();
+}
+
+/** Skill names from the lexicon that appear in a line of text. */
+function lexiconSkillsIn(line: string): string[] {
+  const lower = line.toLowerCase();
+  return SKILL_LEXICON.filter((skill) => {
+    const n = normalizeKeyword(skill);
+    if (n.length <= 2) return new RegExp(`\\b${escapeReg(n)}\\b`, "i").test(lower);
+    return lower.includes(n);
+  });
+}
+
+/**
+ * Pulls requirement items out of a bulleted section.
+ *
+ * A requirement written as prose ("Experience with PostgreSQL, Redis, and REST
+ * APIs") is reported as the skills it names, not as the sentence — a user can
+ * act on "Redis" but not on a sentence fragment. Lines naming no known skill
+ * are kept whole so genuinely domain-specific asks still surface.
+ */
 function extractListedItems(section: string): string[] {
   if (!section) return [];
-  const lines = section.split(/\n+/);
   const items: string[] = [];
-  for (const line of lines) {
-    const cleaned = line
-      .replace(/^[\s•\-*–—\d.)]+/, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (cleaned.length < 2 || cleaned.length > 80) continue;
-    if (/^(requirements|qualifications|responsibilities|preferred|must)/i.test(cleaned)) continue;
-    // Prefer short skill-like tokens
-    if (/,/.test(cleaned) && cleaned.length < 60) {
-      items.push(...cleaned.split(",").map((s) => s.trim()).filter((s) => s.length >= 2 && s.length <= 40));
+
+  for (const line of section.split(/\n+/)) {
+    const cleaned = tidyItem(line);
+    if (cleaned.length < 2 || cleaned.length > 120) continue;
+    if (BOILERPLATE.test(cleaned)) continue;
+
+    const skills = lexiconSkillsIn(cleaned);
+    if (skills.length) {
+      items.push(...skills);
+      continue;
+    }
+
+    const parts = cleaned.split(",").map(tidyItem).filter(Boolean);
+    const isTokenList =
+      parts.length > 1 &&
+      parts.every((part) => part.split(" ").length <= 3 && !/^(and|or|plus|with)\b/i.test(part));
+
+    if (isTokenList) {
+      items.push(...parts.filter((part) => part.length >= 2 && part.length <= 40));
     } else if (cleaned.split(" ").length <= 6) {
       items.push(cleaned);
     }
   }
-  return unique(items).slice(0, 20);
+
+  return unique(items.filter(isUsefulKeyword)).slice(0, 20);
 }

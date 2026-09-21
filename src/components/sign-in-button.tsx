@@ -1,14 +1,8 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { canSignIn, startSignIn } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-
-function safeCallback(url: string | null | undefined, fallback = "/gallery") {
-  if (!url || !url.startsWith("/") || url.startsWith("//")) return fallback;
-  return url;
-}
 
 export function SignInButton({
   callbackUrl,
@@ -17,6 +11,7 @@ export function SignInButton({
   size = "default",
   variant = "default",
   googleConfigured = false,
+  demoConfigured = false,
 }: {
   callbackUrl?: string;
   children?: React.ReactNode;
@@ -24,9 +19,9 @@ export function SignInButton({
   size?: "default" | "sm" | "lg" | "icon";
   variant?: "default" | "secondary" | "outline" | "ghost" | "link";
   googleConfigured?: boolean;
+  demoConfigured?: boolean;
 }) {
-  const search = useSearchParams();
-  const target = safeCallback(callbackUrl ?? search.get("from"));
+  const enabled = canSignIn(googleConfigured, demoConfigured);
 
   return (
     <Button
@@ -34,7 +29,10 @@ export function SignInButton({
       size={size}
       variant={variant}
       className={cn(className)}
-      onClick={() => signIn(googleConfigured ? "google" : "demo", { callbackUrl: target })}
+      disabled={!enabled}
+      onClick={() =>
+        startSignIn({ googleConfigured, demoConfigured, callbackUrl })
+      }
     >
       {children}
     </Button>

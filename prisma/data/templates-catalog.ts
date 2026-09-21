@@ -63,6 +63,7 @@ ${JAKES_PREAMBLE}
 {\\Huge\\scshape {{fullName}}} \\\\[4pt]
 {\\small {{contactLine}}}
 \\end{center}
+{{summaryBlock}}
 \\section{Education}
 {{educationBlock}}
 \\section{Experience}
@@ -90,6 +91,7 @@ ${JAKES_PREAMBLE}
 {\\Huge\\bfseries {{fullName}}} \\\\[4pt]
 {\\small {{contactLine}}}
 \\end{center}
+{{summaryBlock}}
 \\section{Education}
 {{educationBlock}}
 \\section{Experience}

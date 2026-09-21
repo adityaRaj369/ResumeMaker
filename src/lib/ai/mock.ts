@@ -1,39 +1,13 @@
 import type { AIProvider } from "@/lib/ai/provider";
+import { analyzeJobDescriptionHeuristic } from "@/lib/ats/analyze-jd";
 import type { JdAnalysis, ResumeContent, RewriteResult } from "@/lib/types";
 import { normalizeKeyword } from "@/lib/utils";
 
 function extractKeywords(jd: string): string[] {
-  const known = [
-    "TypeScript",
-    "JavaScript",
-    "Python",
-    "React",
-    "Next.js",
-    "Node.js",
-    "PostgreSQL",
-    "Prisma",
-    "AWS",
-    "Docker",
-    "Kubernetes",
-    "CI/CD",
-    "GraphQL",
-    "REST",
-    "system design",
-    "machine learning",
-    "SQL",
-    "Redis",
-    "Kafka",
-    "Go",
-    "Java",
-    "Swift",
-    "Figma",
-    "product strategy",
-  ];
-  const found = known.filter((k) => jd.toLowerCase().includes(k.toLowerCase()));
-  const extras = Array.from(jd.matchAll(/\b([A-Z][A-Za-z0-9.+#]{2,24})\b/g))
-    .map((m) => m[1])
-    .filter((word) => !["The", "This", "You", "Our", "And"].includes(word));
-  return Array.from(new Set([...found, ...extras])).slice(0, 24);
+  const analysis = analyzeJobDescriptionHeuristic(jd);
+  return Array.from(
+    new Set([...analysis.mustHaveKeywords, ...analysis.niceToHaveKeywords, ...analysis.hardSkills]),
+  ).slice(0, 24);
 }
 
 function reorderSkills(content: ResumeContent, keywords: string[]): ResumeContent {
@@ -66,28 +40,11 @@ function tailorBullets(bullets: string[], keywords: string[]) {
 export function createMockProvider(): AIProvider {
   return {
     id: "mock",
+    // Without an API key there is no model to call, so this returns the same
+    // deterministic analysis the public ATS checker uses rather than a
+    // different, weaker guess.
     async analyzeJobDescription(jd) {
-      const keywords = extractKeywords(jd);
-      const analysis: JdAnalysis = {
-        hardSkills: keywords.slice(0, 10),
-        softSkills: ["communication", "ownership", "collaboration"].filter((s) =>
-          jd.toLowerCase().includes(s),
-        ),
-        tools: keywords.filter((k) => /aws|docker|git|jira|figma|kubernetes|redis/i.test(k)),
-        seniorityLevel: /senior|staff|principal/i.test(jd)
-          ? "senior"
-          : /intern|junior|new grad/i.test(jd)
-            ? "junior"
-            : "mid",
-        keyResponsibilities: jd
-          .split(/[\n•-]+/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 28)
-          .slice(0, 6),
-        mustHaveKeywords: keywords.slice(0, 8),
-        niceToHaveKeywords: keywords.slice(8, 16),
-      };
-      return analysis;
+      return analyzeJobDescriptionHeuristic(jd);
     },
     async rewriteResume({ profile, analysis, match }) {
       const keywords = [...analysis.mustHaveKeywords, ...analysis.hardSkills];
@@ -112,7 +69,7 @@ export function createMockProvider(): AIProvider {
         },
         warnings: match.genuinelyMissing.map((keyword) => ({
           type: "missing_skill" as const,
-          message: `This JD wants ${keyword} — it is not in your profile, so it was not added.`,
+          message: `This JD asks for ${keyword} — it is not in your profile, so it was not added.`,
           evidence: keyword,
         })),
       };

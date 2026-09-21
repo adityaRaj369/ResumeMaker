@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTemplateByIdOrSlug } from "@/lib/templates";
 import { MarketingHeader } from "@/components/marketing-header";
+import { TemplateThumbnail } from "@/components/gallery/template-thumbnail";
 import { TemplateUseActions } from "@/components/templates/template-use-actions";
 import { Badge } from "@/components/ui/badge";
 import { siteConfig } from "@/lib/site";
@@ -31,6 +32,7 @@ export default async function TemplateDetailPage({ params }: Props) {
   const template = await getTemplateByIdOrSlug(slug);
   if (!template) notFound();
   const googleConfigured = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+  const demoConfigured = process.env.AUTH_DEMO_LOGIN === "true";
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -46,15 +48,10 @@ export default async function TemplateDetailPage({ params }: Props) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <MarketingHeader googleConfigured={googleConfigured} />
+      <MarketingHeader googleConfigured={googleConfigured} demoConfigured={demoConfigured} />
       <main className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-10 sm:px-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="overflow-hidden rounded-2xl border border-border bg-desk shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={template.thumbnailUrl}
-            alt={`${template.name} real resume sample`}
-            className="w-full object-contain object-top"
-          />
+        <div className="rounded-2xl border border-border bg-desk p-4 shadow-sm sm:p-6">
+          <TemplateThumbnail slug={template.slug} name={template.name} eager showLabel />
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-accent">Real LaTeX template</p>
@@ -73,7 +70,12 @@ export default async function TemplateDetailPage({ params }: Props) {
             </p>
           )}
           <div className="mt-8">
-            <TemplateUseActions templateId={template.id} googleConfigured={googleConfigured} />
+            <TemplateUseActions
+              templateId={template.id}
+              templateName={template.name}
+              googleConfigured={googleConfigured}
+              demoConfigured={demoConfigured}
+            />
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
             Already have a resume PDF?{" "}

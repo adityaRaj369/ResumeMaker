@@ -129,6 +129,6 @@ export const GENERATION_STEPS: { id: GenerationStep; label: string }[] = [
   { id: "match", label: "Matching your experience" },
   { id: "rewrite", label: "Tailoring your resume" },
   { id: "validate", label: "Validating claims" },
-  { id: "compile", label: "Compiling PDF" },
+  { id: "compile", label: "Rendering PDF" },
   { id: "score", label: "Scoring ATS match" },
 ];

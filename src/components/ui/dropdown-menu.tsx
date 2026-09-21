@@ -31,8 +31,33 @@ export function DropdownMenuItem({
     <DropdownMenuPrimitive.Item
       className={cn(
         "flex cursor-pointer items-center rounded-xl px-3 py-2 text-sm outline-none hover:bg-muted",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
+      {...props}
+    />
+  );
+}
+
+export function DropdownMenuLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return (
+    <DropdownMenuPrimitive.Label
+      className={cn("px-3 py-1.5 text-xs font-medium text-muted-foreground", className)}
+      {...props}
+    />
+  );
+}
+
+export function DropdownMenuSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      className={cn("-mx-1 my-1 h-px bg-border", className)}
       {...props}
     />
   );

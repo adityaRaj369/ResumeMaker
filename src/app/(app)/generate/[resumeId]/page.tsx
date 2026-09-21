@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { GenerateView } from "@/components/generate/generate-view";
 
 export default async function GeneratePage({
@@ -9,5 +10,7 @@ export default async function GeneratePage({
 }) {
   const { resumeId } = await params;
   const { jobId } = await searchParams;
-  return <GenerateView resumeId={resumeId} jobId={jobId || resumeId} />;
+  // Without a job there is nothing to watch — the resume itself is the result.
+  if (!jobId) redirect(`/editor/${resumeId}`);
+  return <GenerateView resumeId={resumeId} jobId={jobId} />;
 }

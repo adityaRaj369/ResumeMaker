@@ -51,8 +51,15 @@ export function AtsCheckerForm() {
 
         <div className="mt-8 grid gap-4">
           <label className="grid gap-2">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Job description
+              <button
+                type="button"
+                className="normal-case tracking-normal underline-offset-4 hover:underline"
+                onClick={() => setJd("")}
+              >
+                clear sample
+              </button>
             </span>
             <Textarea className="min-h-44" value={jd} onChange={(e) => setJd(e.target.value)} />
           </label>
@@ -69,7 +76,7 @@ export function AtsCheckerForm() {
           </label>
           <Button
             size="lg"
-            disabled={loading}
+            disabled={loading || jd.trim().length < 40 || resumeText.trim().length < 80}
             onClick={async () => {
               setLoading(true);
               try {
@@ -91,6 +98,11 @@ export function AtsCheckerForm() {
           >
             {loading ? "Analyzing…" : "Calculate match score"}
           </Button>
+          {resumeText.trim().length > 0 && resumeText.trim().length < 80 ? (
+            <p className="text-xs text-muted-foreground">
+              Paste a bit more of your resume text to get a meaningful score.
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             This is an alignment estimate for applicants — not a score from Workday, Taleo, or Greenhouse.
           </p>
@@ -129,11 +141,15 @@ export function AtsCheckerForm() {
           <div className="space-y-6">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Overall match</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                  Keyword &amp; structure match
+                </p>
                 <div className="mt-1 font-display text-6xl tracking-tight text-foreground">{result.score}</div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Seniority signal: {result.analysis.seniorityLevel}
-                  {result.meta?.analysisSource ? ` · JD parse: ${result.meta.analysisSource}` : ""}
+                  {result.meta?.analysisSource
+                    ? ` · Keywords read by ${result.meta.analysisSource === "ai" ? "a language model" : "rule-based parsing"}`
+                    : ""}
                 </p>
               </div>
               <div

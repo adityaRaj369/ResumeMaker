@@ -1,7 +1,7 @@
 import type { ResumeContent, SkillCategories, CodingProfiles } from "@/lib/types";
 import type { User, UserProfile } from "@prisma/client";
+import { exampleResume } from "@/lib/example-content";
 import { blankResume } from "@/lib/sample-resume";
-import { sampleContentForTemplate } from "@/lib/template-samples";
 
 export function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -47,11 +47,28 @@ export function isProfileReady(content: ResumeContent) {
   );
 }
 
+export type ManualSource = "example" | "profile" | "blank";
+
 /**
- * Manual path — open the published sample for that template so the form is
- * pre-filled with the same fields/values shown on the gallery resume.
+ * Manual path — the gallery shows the example resume in this template, so
+ * opening it must start from that same example. Profile and blank are explicit
+ * choices, never a silent swap to a different person.
  */
-export function manualTemplateContent(templateSlug: string): ResumeContent {
-  if (!templateSlug?.trim()) return blankResume();
-  return sampleContentForTemplate(templateSlug);
+export function manualStartingContent(
+  user: User,
+  profile: UserProfile | null,
+  source: ManualSource = "example",
+): ResumeContent {
+  if (source === "blank") return blankResume();
+  if (source === "profile") {
+    const fromProfile = profileToContent(user, profile);
+    const blank = blankResume();
+    return {
+      ...fromProfile,
+      experience: fromProfile.experience.length ? fromProfile.experience : blank.experience,
+      education: fromProfile.education.length ? fromProfile.education : blank.education,
+      projects: fromProfile.projects?.length ? fromProfile.projects : blank.projects,
+    };
+  }
+  return exampleResume();
 }

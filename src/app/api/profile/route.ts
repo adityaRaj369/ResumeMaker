@@ -1,16 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser, apiError } from "@/lib/session";
 import { ensureUserProfile } from "@/lib/profile";
+import { isProfileReady, profileToContent } from "@/lib/resume-content";
 
 export async function GET() {
   try {
     const user = await requireUser();
     const profile = await ensureUserProfile(user.id);
+    const content = profileToContent(user, profile);
     return Response.json({
       ...profile,
       name: user.name,
       email: user.email,
       image: user.image,
+      // Resume-shaped view of the same data, so the editor can prefill from it.
+      content,
+      ready: isProfileReady(content),
     });
   } catch (error) {
     return apiError(error);

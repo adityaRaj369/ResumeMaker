@@ -1,15 +1,19 @@
 /** Dedupe Strict-Mode double mounts so /editor/new does not create two resumes. */
 const inflight = new Map<string, Promise<{ id: string }>>();
 
-export async function createResumeClient(templateId: string, mode = "manual") {
-  const key = `${templateId}:${mode}`;
+export async function createResumeClient(
+  templateId: string,
+  mode = "manual",
+  source = "example",
+) {
+  const key = `${templateId}:${mode}:${source}`;
   const existing = inflight.get(key);
   if (existing) return existing;
 
   const promise = fetch("/api/resumes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ templateId, mode }),
+    body: JSON.stringify({ templateId, mode, source }),
   })
     .then(async (res) => {
       const data = (await res.json()) as { id?: string; error?: string };

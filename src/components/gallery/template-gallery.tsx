@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { TemplateThumbnail } from "@/components/gallery/template-thumbnail";
 import { cn } from "@/lib/utils";
 
 type Template = {
@@ -40,11 +41,11 @@ export function TemplateGallery() {
   const plugins = useMemo(() => [WheelGesturesPlugin({ forceWheelAxis: "x" })], []);
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
-      loop: true,
+      loop: false,
       align: "center",
       skipSnaps: false,
       dragFree: false,
-      containScroll: false,
+      containScroll: "trimSnaps",
       duration: 22,
       watchDrag: true,
     },
@@ -102,7 +103,8 @@ export function TemplateGallery() {
               Swipe a resume. Use that design.
             </h1>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground md:text-base">
-              Drag · scroll · arrows. Edit opens that resume’s fields already filled — change them on the right.
+              Drag · scroll · arrows. Every page is this template filled with the same labeled
+              example — clicking it opens that exact layout, not a different resume.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -135,6 +137,7 @@ export function TemplateGallery() {
               return (
                 <div
                   key={template.id}
+                  data-template-slug={template.slug}
                   className="min-w-0 shrink-0 grow-0 basis-[88%] px-3 sm:basis-[70%] md:basis-[52%] lg:basis-[42%] xl:basis-[36%]"
                 >
                   <motion.button
@@ -166,12 +169,11 @@ export function TemplateGallery() {
                           : "0 12px 28px -20px rgba(0,0,0,0.25)",
                       }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={template.thumbnailUrl}
-                        alt={`${template.name} real resume sample`}
-                        className="absolute inset-0 h-full w-full object-contain object-center"
-                        draggable={false}
+                      <TemplateThumbnail
+                        slug={template.slug}
+                        name={template.name}
+                        eager={Math.abs(index - selected) <= 1}
+                        className="absolute inset-0"
                       />
                     </div>
                     <div
@@ -215,7 +217,9 @@ export function TemplateGallery() {
               <Button
                 size="lg"
                 onClick={() =>
-                  router.push(`/editor/new?templateId=${encodeURIComponent(current.id)}&mode=manual`)
+                        router.push(
+                          `/editor/new?templateId=${encodeURIComponent(current.id)}&mode=manual&source=example`,
+                        )
                 }
               >
                 <PenLine className="h-4 w-4" /> Use {current.name}
@@ -235,33 +239,28 @@ export function TemplateGallery() {
               <div className="grid gap-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                 <motion.div layoutId={`card-${active.id}`} className="bg-desk p-4 sm:p-6 lg:p-8">
                   <div className="mx-auto w-full max-w-[480px]">
-                    <div className="relative aspect-[8.5/11] w-full overflow-hidden rounded-sm border border-border bg-white shadow-lg">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={active.thumbnailUrl}
-                        alt={`${active.name} real resume sample`}
-                        className="absolute inset-0 h-full w-full object-contain object-center"
-                      />
-                    </div>
+                    <TemplateThumbnail slug={active.slug} name={active.name} eager showLabel />
                   </div>
                 </motion.div>
                 <div className="flex flex-col justify-between gap-6 border-t border-border p-5 sm:p-7 lg:border-l lg:border-t-0 lg:p-9">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Real template</p>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Example layout
+                  </p>
                     <DialogTitle className="mt-2 break-words font-display text-2xl tracking-tight sm:text-3xl md:text-4xl">
                       {active.name}
                     </DialogTitle>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <Badge variant="accent">ATS-Safe · single column</Badge>
+                      {active.atsSafe && <Badge variant="accent">ATS-Safe</Badge>}
                       <Badge variant="outline">{active.category}</Badge>
                     </div>
                     <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-[15px]">
                       {active.description}
                     </p>
                     <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
-                      <li>• Full real sample — scroll if needed on small screens</li>
-                      <li>• Edit opens with this resume’s fields already filled</li>
-                      <li>• Live preview updates as you type; PDF when TeX is available</li>
+                      <li>• This preview is the real {active.name} layout, with labeled example content</li>
+                      <li>• Opening it keeps this layout and this example, so you can edit what you see</li>
+                      <li>• Swap in your career profile, or download PDF / .tex when you&apos;re ready</li>
                     </ul>
                   </div>
                   <div className="grid gap-3 pb-1">
@@ -270,7 +269,9 @@ export function TemplateGallery() {
                       className="w-full"
                       onClick={() => {
                         setActive(null);
-                        router.push(`/editor/new?templateId=${encodeURIComponent(active.id)}&mode=manual`);
+                        router.push(
+                          `/editor/new?templateId=${encodeURIComponent(active.id)}&mode=manual&source=example`,
+                        );
                       }}
                     >
                       <PenLine className="h-4 w-4" /> Use this template
