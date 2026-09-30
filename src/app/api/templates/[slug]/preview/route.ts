@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // Only cached in production; in development every request re-renders so
 // template edits show up immediately.
-const cache = process.env.NODE_ENV === "production" ? new Map<string, Buffer>() : null;
+const cache = new Map<string, Buffer>();
 
 /**
  * Public preview of a template, rendered from the shared example content by the
@@ -21,7 +21,7 @@ export async function GET(
   const { slug } = await params;
   if (!isKnownTemplateSlug(slug)) return new Response("Unknown template", { status: 404 });
 
-  let pdf = cache?.get(slug);
+  let pdf = cache.get(slug);
   if (!pdf) {
     const rendered = await renderResumePdf({
       content: exampleResume(),
@@ -29,7 +29,7 @@ export async function GET(
       title: `${slug} template preview`,
     });
     pdf = rendered.pdf;
-    cache?.set(slug, pdf);
+    cache.set(slug, pdf);
   }
 
   return new Response(new Uint8Array(pdf), {
@@ -37,9 +37,7 @@ export async function GET(
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${slug}-example.pdf"`,
       "X-Template-Slug": slug,
-      "Cache-Control": cache
-        ? "public, max-age=3600, stale-while-revalidate=86400"
-        : "no-store",
+      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
       Vary: "Accept",
     },
   });

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { useSession } from "next-auth/react";
-import { Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SignInButton } from "@/components/sign-in-button";
 import { Button } from "@/components/ui/button";
@@ -18,11 +17,11 @@ export function MarketingHeader({
   const { data: session, status } = useSession();
 
   return (
-    <header className="border-b border-border/80 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-6 sm:px-8">
-        <Link href="/" className="flex items-center gap-2 font-display text-[15px] tracking-tight text-foreground">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent text-accent-foreground">
-            <Sparkles className="h-3.5 w-3.5" />
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/70 backdrop-blur-2xl">
+      <div className="mx-auto flex h-[4.25rem] w-full max-w-6xl items-center justify-between px-6 sm:px-8">
+        <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground">
+          <span className="grid h-7 w-7 place-items-center rounded-xl bg-accent text-[11px] font-bold text-accent-foreground shadow-[0_8px_16px_-8px_rgba(196,92,38,0.85)]">
+            R
           </span>
           ResumeForge
         </Link>

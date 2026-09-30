@@ -12,7 +12,7 @@ export function ThemeToggle() {
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    return <Button variant="ghost" size="icon" aria-label="Toggle theme" disabled className="opacity-0" />;
+    return <span className="inline-block h-10 w-10 shrink-0" aria-hidden />;
   }
 
   const dark = resolvedTheme === "dark";

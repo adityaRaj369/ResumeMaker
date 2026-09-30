@@ -16,12 +16,14 @@ export function TemplateThumbnail({
   className,
   eager = false,
   showLabel = false,
+  fill = false,
 }: {
   slug: string;
   name?: string;
   className?: string;
   eager?: boolean;
   showLabel?: boolean;
+  fill?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(eager);
@@ -45,8 +47,8 @@ export function TemplateThumbnail({
     <div className={className}>
       <div
         ref={ref}
-        className="relative w-full overflow-hidden bg-white"
-        style={{ aspectRatio: "8.5 / 11" }}
+        className={cn("relative overflow-hidden bg-white", fill ? "h-full w-full" : "w-full")}
+        style={fill ? undefined : { aspectRatio: "8.5 / 11" }}
       >
         {visible ? (
           <PdfCanvas

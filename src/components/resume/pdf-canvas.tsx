@@ -150,10 +150,22 @@ export function PdfCanvas({
     <div className={cn("relative w-full", className)}>
       <div ref={containerRef} className="w-full" />
       {status !== "ready" ? (
-        <div className="absolute inset-0 grid place-items-center bg-white">
-          <p className="text-xs text-neutral-400">
-            {status === "error" ? "Preview unavailable" : "Rendering…"}
-          </p>
+        <div className="absolute inset-0 bg-white px-[10%] py-[12%]">
+          {status === "error" ? (
+            <p className="text-xs text-neutral-400">Preview unavailable</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="h-2.5 w-2/5 rounded bg-neutral-200" />
+              <div className="h-1.5 w-3/5 rounded bg-neutral-100" />
+              <div className="mt-5 space-y-1.5">
+                <div className="h-1.5 w-full rounded bg-neutral-100" />
+                <div className="h-1.5 w-[92%] rounded bg-neutral-100" />
+                <div className="h-1.5 w-[85%] rounded bg-neutral-100" />
+                <div className="h-1.5 w-full rounded bg-neutral-100" />
+                <div className="h-1.5 w-[70%] rounded bg-neutral-100" />
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
     </div>

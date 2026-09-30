@@ -39,7 +39,7 @@ function NewResumeRedirect() {
 
   if (error) {
     return (
-      <div className="grid h-[calc(100vh-56px)] place-items-center px-6 text-center">
+      <div className="grid h-[calc(100vh-64px)] place-items-center px-6 text-center">
         <div>
           <p className="text-sm text-muted-foreground">{error}</p>
           <button className="mt-4 text-sm text-accent underline" onClick={() => router.replace("/gallery")}>
@@ -51,7 +51,7 @@ function NewResumeRedirect() {
   }
 
   return (
-    <div className="grid h-[calc(100vh-56px)] place-items-center text-sm text-muted-foreground">
+    <div className="grid h-[calc(100vh-64px)] place-items-center text-sm text-muted-foreground">
         Opening {source === "blank" ? "a blank" : source === "profile" ? "your" : "the example"} resume…
     </div>
   );
@@ -61,7 +61,7 @@ export default function NewEditorPage() {
   return (
     <Suspense
       fallback={
-        <div className="grid h-[calc(100vh-56px)] place-items-center text-sm text-muted-foreground">
+        <div className="grid h-[calc(100vh-64px)] place-items-center text-sm text-muted-foreground">
           Opening editor…
         </div>
       }

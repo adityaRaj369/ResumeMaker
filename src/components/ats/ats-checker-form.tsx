@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { FileUp, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { extractPdfTextInBrowser } from "@/lib/pdf/extract-client";
+import { isPdfFile, isTextFile, MAX_UPLOAD_BYTES, normalizeExtractedText } from "@/lib/pdf/text";
+import { SAMPLE_ATS_RESUME_TEXT } from "@/lib/sample-ats-resume";
 import { SAMPLE_RAZORPAY_JD } from "@/lib/sample-jd";
+import { cn } from "@/lib/utils";
 
 type Result = {
   score: number;
@@ -33,50 +38,90 @@ type Result = {
 export function AtsCheckerForm() {
   const [jd, setJd] = useState(SAMPLE_RAZORPAY_JD);
   const [resumeText, setResumeText] = useState("");
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [jdFileName, setJdFileName] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState<"resume" | "jd" | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr]">
       <div>
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-accent">Free ATS match checker</p>
-        <h1 className="mt-2 font-display text-4xl tracking-tight text-foreground md:text-5xl">
+        <p className="eyebrow">Free ATS match checker</p>
+        <h1 className="mt-4 font-display text-4xl text-foreground md:text-5xl">
           See how your resume aligns with a job description
         </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          Works with <strong className="font-medium text-foreground">any resume you already have</strong> — Word, Google
-          Docs, or PDF. You do not need a ResumeForge account or a resume built here. Open your PDF → Select all →
-          Copy → paste below with the job description, then calculate.
+          Works with <strong className="font-medium text-foreground">any resume you already have</strong> — upload a PDF
+          or paste text from Word / Google Docs. No ResumeForge account required.
         </p>
 
         <div className="mt-8 grid gap-4">
           <label className="grid gap-2">
             <span className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Job description
-              <button
-                type="button"
-                className="normal-case tracking-normal underline-offset-4 hover:underline"
-                onClick={() => setJd("")}
-              >
-                clear sample
-              </button>
+              <span className="flex gap-3 normal-case tracking-normal">
+                <button type="button" className="underline-offset-4 hover:underline" onClick={() => setJd("")}>
+                  clear sample
+                </button>
+              </span>
             </span>
+            <FileDrop
+              label="Upload JD PDF"
+              fileName={jdFileName}
+              busy={extracting === "jd"}
+              onClear={() => setJdFileName(null)}
+              onFile={(file) =>
+                ingestFile(file, "jd", {
+                  setExtracting,
+                  setText: setJd,
+                  setFileName: setJdFileName,
+                })
+              }
+            />
             <Textarea className="min-h-44" value={jd} onChange={(e) => setJd(e.target.value)} />
           </label>
           <label className="grid gap-2">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Resume plain text
+            <span className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Resume
+              <button
+                type="button"
+                className="normal-case tracking-normal underline-offset-4 hover:underline"
+                onClick={() => {
+                  setResumeText(SAMPLE_ATS_RESUME_TEXT);
+                  setResumeFileName(null);
+                  toast.message("Loaded a sample resume — replace it with yours to score a real file.");
+                }}
+              >
+                load sample
+              </button>
             </span>
+            <FileDrop
+              label="Upload resume PDF"
+              fileName={resumeFileName}
+              busy={extracting === "resume"}
+              onClear={() => setResumeFileName(null)}
+              onFile={(file) =>
+                ingestFile(file, "resume", {
+                  setExtracting,
+                  setText: setResumeText,
+                  setFileName: setResumeFileName,
+                })
+              }
+            />
             <Textarea
               className="min-h-56"
-              placeholder="Open your PDF → select all → copy → paste here. Contact info in headers/footers is often missed by ATS; include it in the body if needed."
+              placeholder="Upload a PDF above, or paste resume text here."
               value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
+              onChange={(e) => {
+                setResumeText(e.target.value);
+                setResumeFileName(null);
+              }}
             />
           </label>
           <Button
             size="lg"
-            disabled={loading || jd.trim().length < 40 || resumeText.trim().length < 80}
+            disabled={loading || extracting !== null || jd.trim().length < 40 || resumeText.trim().length < 80}
             onClick={async () => {
               setLoading(true);
               try {
@@ -99,9 +144,7 @@ export function AtsCheckerForm() {
             {loading ? "Analyzing…" : "Calculate match score"}
           </Button>
           {resumeText.trim().length > 0 && resumeText.trim().length < 80 ? (
-            <p className="text-xs text-muted-foreground">
-              Paste a bit more of your resume text to get a meaningful score.
-            </p>
+            <p className="text-xs text-muted-foreground">Paste or upload a bit more of your resume to get a score.</p>
           ) : null}
           <p className="text-xs text-muted-foreground">
             This is an alignment estimate for applicants — not a score from Workday, Taleo, or Greenhouse.
@@ -113,19 +156,18 @@ export function AtsCheckerForm() {
         {!result ? (
           <div className="flex h-full min-h-[360px] flex-col justify-center gap-5">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">How to use</p>
-              <h2 className="mt-2 font-display text-xl text-foreground">Score in three steps</h2>
+              <p className="eyebrow">How to use</p>
+              <h2 className="mt-4 font-display text-xl text-foreground">Score in three steps</h2>
             </div>
             <ol className="space-y-3 text-sm text-muted-foreground">
               <li className="flex gap-3">
                 <span className="font-display text-lg text-accent">1</span>
-                <span>Paste the full job description on the left (a sample JD is pre-filled — replace it).</span>
+                <span>Paste the full job description on the left, or upload a JD PDF (a sample is pre-filled).</span>
               </li>
               <li className="flex gap-3">
                 <span className="font-display text-lg text-accent">2</span>
                 <span>
-                  Paste your resume as plain text (from any PDF/Word file). Building a resume on ResumeForge first is
-                  optional.
+                  Upload your resume PDF (or paste text). Building a resume on ResumeForge first is optional.
                 </span>
               </li>
               <li className="flex gap-3">
@@ -158,9 +200,7 @@ export function AtsCheckerForm() {
                   background: `conic-gradient(var(--accent) ${result.score * 3.6}deg, var(--border) 0deg)`,
                 }}
               >
-                <div className="grid h-16 w-16 place-items-center rounded-full bg-card text-sm font-medium">
-                  /100
-                </div>
+                <div className="grid h-16 w-16 place-items-center rounded-full bg-card text-sm font-medium">/100</div>
               </div>
             </div>
 
@@ -236,4 +276,123 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="mt-1 text-lg font-semibold text-foreground">{value}</div>
     </div>
   );
+}
+
+function FileDrop({
+  label,
+  fileName,
+  busy,
+  onFile,
+  onClear,
+}: {
+  label: string;
+  fileName: string | null;
+  busy: boolean;
+  onFile: (file: File) => void;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-muted/30 px-3 py-3 text-sm transition",
+        dragOver && "border-accent bg-accent/5",
+      )}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragOver(false);
+        const file = event.dataTransfer.files[0];
+        if (file) onFile(file);
+      }}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf,text/plain,.txt"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onFile(file);
+          event.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left text-muted-foreground"
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+      >
+        {busy ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <FileUp className="h-4 w-4 shrink-0" />}
+        <span className="truncate">{busy ? "Reading PDF…" : fileName ? fileName : `${label} or drop here`}</span>
+      </button>
+      {fileName && !busy ? (
+        <button
+          type="button"
+          className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={onClear}
+          aria-label="Remove file"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+async function ingestFile(
+  file: File,
+  target: "resume" | "jd",
+  setters: {
+    setExtracting: (value: "resume" | "jd" | null) => void;
+    setText: (value: string) => void;
+    setFileName: (value: string | null) => void;
+  },
+) {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    toast.error("File is too large (max 8 MB)");
+    return;
+  }
+
+  setters.setExtracting(target);
+  try {
+    let text = "";
+    if (isTextFile(file)) {
+      text = normalizeExtractedText(await file.text());
+    } else if (isPdfFile(file)) {
+      try {
+        text = await extractPdfTextInBrowser(file);
+      } catch {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/ats/extract", { method: "POST", body: form });
+        const data = (await res.json()) as { text?: string; error?: string };
+        if (!res.ok || !data.text) throw new Error(data.error || "Could not read that PDF");
+        text = data.text;
+      }
+    } else {
+      toast.error("Upload a PDF or a .txt file");
+      return;
+    }
+
+    const min = target === "resume" ? 80 : 40;
+    if (text.trim().length < min) {
+      toast.error("No readable text in that file. If it is a scanned PDF, paste the text instead.");
+      return;
+    }
+
+    setters.setText(text);
+    setters.setFileName(file.name);
+    toast.success(`Extracted text from ${file.name}`);
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Could not read that file");
+  } finally {
+    setters.setExtracting(null);
+  }
 }

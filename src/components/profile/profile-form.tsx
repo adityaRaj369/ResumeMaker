@@ -67,8 +67,8 @@ export function ProfileForm({ redirectTo }: { redirectTo?: string }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-8">
-      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Career profile</p>
-      <h1 className="mt-2 font-display text-4xl">Your experience library</h1>
+      <p className="eyebrow">Career profile</p>
+      <h1 className="mt-4 font-display text-4xl">Your experience library</h1>
       <p className="mt-2 text-muted-foreground">
         Fill this once. AI job matching only ever rewords what you enter. For a manual template,
         import this profile from the editor in one click — templates never silently swap in a

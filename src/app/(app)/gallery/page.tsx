@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { TemplateGallery } from "@/components/gallery/template-gallery";
+import { listPublishedTemplates } from "@/lib/templates";
 
 export const metadata: Metadata = {
   title: "Resume Template Gallery",
@@ -7,6 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function GalleryPage() {
-  return <TemplateGallery />;
+export default async function GalleryPage() {
+  const templates = await listPublishedTemplates();
+  return <TemplateGallery initialTemplates={templates} />;
 }

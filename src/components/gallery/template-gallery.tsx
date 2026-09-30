@@ -2,14 +2,12 @@
 
 import useEmblaCarousel from "embla-carousel-react";
 import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
-import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Sparkles, PenLine, GripHorizontal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Sparkles, PenLine } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { TemplateThumbnail } from "@/components/gallery/template-thumbnail";
 import { cn } from "@/lib/utils";
 
@@ -23,38 +21,40 @@ type Template = {
   atsSafe: boolean;
 };
 
-/**
- * Original carousel geometry (from first working gallery):
- * slide width → letter aspect [8.5/11] → full page visible, never max-h cropped.
- */
-export function TemplateGallery() {
-  const router = useRouter();
-  const { data: templates = [], isLoading } = useQuery({
+function editorUrl(templateId: string) {
+  return `/editor/new?templateId=${encodeURIComponent(templateId)}&mode=manual&source=example`;
+}
+
+export function TemplateGallery({
+  initialTemplates = [],
+}: {
+  initialTemplates?: Template[];
+}) {
+  const { data: templates = initialTemplates } = useQuery({
     queryKey: ["templates"],
     queryFn: async () => {
       const res = await fetch("/api/templates");
       const data = await res.json();
       return Array.isArray(data) ? (data as Template[]) : [];
     },
+    initialData: initialTemplates.length ? initialTemplates : undefined,
   });
 
   const plugins = useMemo(() => [WheelGesturesPlugin({ forceWheelAxis: "x" })], []);
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
-      loop: false,
+      loop: true,
       align: "center",
       skipSnaps: false,
       dragFree: false,
-      containScroll: "trimSnaps",
-      duration: 22,
-      watchDrag: true,
+      containScroll: false,
+      duration: 18,
+      watchDrag: false,
     },
     plugins,
   );
 
   const [selected, setSelected] = useState(0);
-  const [active, setActive] = useState<Template | null>(null);
-  const dragMoved = useRef(false);
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -63,20 +63,15 @@ export function TemplateGallery() {
 
   useEffect(() => {
     if (!emblaApi) return;
+    emblaApi.reInit();
     onSelect();
     emblaApi.on("select", onSelect);
     emblaApi.on("reInit", onSelect);
-    emblaApi.on("pointerDown", () => {
-      dragMoved.current = false;
-    });
-    emblaApi.on("scroll", () => {
-      dragMoved.current = true;
-    });
     return () => {
       emblaApi.off("select", onSelect);
       emblaApi.off("reInit", onSelect);
     };
-  }, [emblaApi, onSelect]);
+  }, [emblaApi, onSelect, templates.length]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -90,210 +85,135 @@ export function TemplateGallery() {
   const current = templates[selected];
 
   return (
-    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden bg-background text-foreground">
-      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
+    <div className="relative flex min-h-[calc(100vh-64px)] flex-col overflow-hidden text-foreground">
+      <div className="desk-wood pointer-events-none absolute inset-0" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/50" />
 
-      <div className="relative mx-auto max-w-[1400px] px-4 pb-10 pt-8">
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-              Real LaTeX templates
-            </p>
-            <h1 className="mt-2 font-display text-3xl tracking-tight md:text-4xl">
-              Swipe a resume. Use that design.
-            </h1>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground md:text-base">
-              Drag · scroll · arrows. Every page is this template filled with the same labeled
-              example — clicking it opens that exact layout, not a different resume.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:flex">
-              <GripHorizontal className="h-3.5 w-3.5" />
-              Drag · scroll · ← →
-            </div>
-            <Button variant="secondary" size="icon" onClick={() => emblaApi?.scrollPrev()} aria-label="Previous">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="secondary" size="icon" onClick={() => emblaApi?.scrollNext()} aria-label="Next">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+      <div className="relative mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-3 pb-8 pt-5 sm:px-6">
+        <div className="mb-4 text-center md:mb-5">
+          <p className="eyebrow">Template gallery</p>
+          <h1 className="mt-3 font-display text-3xl text-[#f6efe4] md:text-4xl">Swipe left or right</h1>
+          <p className="mx-auto mt-1.5 max-w-xl text-sm text-white/60">
+            Click a resume to edit it. Use the arrows, dots, or press ← → to browse.
+          </p>
         </div>
 
-        {isLoading && (
-          <div className="flex justify-center py-24 text-muted-foreground">Loading templates…</div>
-        )}
-
-        {/* No fixed viewport height — letter aspect comes from slide width (original working geometry). */}
-        <div
-          className="cursor-grab overflow-hidden active:cursor-grabbing"
-          ref={emblaRef}
-          style={{ touchAction: "pan-y" }}
-        >
-          <div className="flex touch-pan-y">
-            {templates.map((template, index) => {
-              const isCenter = selected === index;
-              return (
-                <div
-                  key={template.id}
-                  data-template-slug={template.slug}
-                  className="min-w-0 shrink-0 grow-0 basis-[88%] px-3 sm:basis-[70%] md:basis-[52%] lg:basis-[42%] xl:basis-[36%]"
-                >
-                  <motion.button
-                    type="button"
-                    layoutId={`card-${template.id}`}
-                    onClick={() => {
-                      if (dragMoved.current) return;
-                      if (!isCenter) {
-                        emblaApi?.scrollTo(index);
-                        return;
-                      }
-                      setActive(template);
-                    }}
-                    className={cn(
-                      "group w-full text-left transition-[transform,opacity,filter] duration-300",
-                      isCenter ? "scale-100 opacity-100" : "scale-[0.88] opacity-45 hover:opacity-70",
-                    )}
-                    style={{ transformOrigin: "center center" }}
-                  >
-                    {/* Full letter page: width drives height — nothing cropped top/bottom */}
-                    <div
-                      className={cn(
-                        "relative aspect-[8.5/11] w-full overflow-hidden rounded-sm border border-border bg-white",
-                        isCenter && "ring-1 ring-border",
-                      )}
-                      style={{
-                        boxShadow: isCenter
-                          ? "0 1px 0 rgba(255,255,255,0.5) inset, 0 40px 80px -40px rgba(0,0,0,0.55), 0 12px 24px -12px rgba(0,0,0,0.35)"
-                          : "0 12px 28px -20px rgba(0,0,0,0.25)",
-                      }}
-                    >
-                      <TemplateThumbnail
-                        slug={template.slug}
-                        name={template.name}
-                        eager={Math.abs(index - selected) <= 1}
-                        className="absolute inset-0"
-                      />
-                    </div>
-                    <div
-                      className={cn(
-                        "mt-5 flex items-start justify-between gap-3 transition-opacity",
-                        isCenter ? "opacity-100" : "opacity-0",
-                      )}
-                    >
-                      <div>
-                        <div className="font-display text-2xl tracking-tight">{template.name}</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {template.atsSafe && <Badge variant="accent">ATS-Safe</Badge>}
-                          <Badge variant="outline">{template.category}</Badge>
-                        </div>
-                      </div>
-                      <div className="pt-1 text-xs text-muted-foreground">Click for options</div>
-                    </div>
-                  </motion.button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mt-8 flex flex-col items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            {templates.map((t, i) => (
-              <button
-                key={t.id}
-                aria-label={`Go to ${t.name}`}
-                onClick={() => emblaApi?.scrollTo(i)}
+        {templates.length === 0 && (
+          <div className="flex flex-1 items-center justify-center gap-6">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
                 className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  i === selected ? "w-6 bg-accent" : "w-1.5 bg-muted hover:bg-muted-foreground/40",
+                  "h-[min(72vh,780px)] aspect-[8.5/11] rounded-xl bg-white shadow-xl",
+                  i === 1 ? "scale-100" : "hidden scale-90 opacity-50 sm:block",
                 )}
               />
             ))}
           </div>
-          {current && (
+        )}
+
+        {templates.length > 0 && (
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <button
+              type="button"
+              aria-label="Previous template"
+              onClick={() => emblaApi?.scrollPrev()}
+              className="absolute left-0 top-[42%] z-20 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur-sm transition hover:bg-accent hover:text-accent-foreground sm:left-2 sm:h-14 sm:w-14"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <button
+              type="button"
+              aria-label="Next template"
+              onClick={() => emblaApi?.scrollNext()}
+              className="absolute right-0 top-[42%] z-20 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur-sm transition hover:bg-accent hover:text-accent-foreground sm:right-2 sm:h-14 sm:w-14"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+
+            <div className="min-h-0 flex-1 cursor-grab overflow-hidden px-10 sm:px-16" ref={emblaRef}>
+              <div className="flex h-[min(72vh,820px)] items-center">
+                {templates.map((template, index) => {
+                  const isCenter = selected === index;
+                  return (
+                    <div
+                      key={template.id}
+                      className="flex h-full min-w-0 shrink-0 grow-0 basis-[92%] justify-center px-2 sm:basis-[70%] sm:px-3 lg:basis-[52%] xl:basis-[44%]"
+                    >
+                      <Link
+                        href={editorUrl(template.slug)}
+                        aria-label={`Edit ${template.name}`}
+                        className={cn(
+                          "h-full max-w-full text-left transition duration-300",
+                          isCenter ? "scale-100 opacity-100" : "scale-[0.92] opacity-60 hover:opacity-90",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "relative h-full overflow-hidden rounded-xl border border-black/10 bg-white",
+                            isCenter && "ring-2 ring-accent/40",
+                          )}
+                          style={{
+                            aspectRatio: "8.5 / 11",
+                            boxShadow: isCenter
+                              ? "0 40px 70px -20px rgba(0,0,0,0.72)"
+                              : "0 18px 36px -20px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          <TemplateThumbnail
+                            slug={template.slug}
+                            name={template.name}
+                            eager={Math.abs(index - selected) <= 2 || templates.length < 6}
+                            fill
+                            className="absolute inset-0 h-full"
+                          />
+                        </div>
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {current && (
+          <div className="mt-5 flex flex-col items-center gap-3">
+            <div className="text-center">
+              <div className="font-display text-2xl text-[#f6efe4] md:text-3xl">{current.name}</div>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                {current.atsSafe && <Badge variant="accent">ATS-Safe</Badge>}
+                <Badge variant="outline">{current.category}</Badge>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {templates.map((t, i) => (
+                <button
+                  key={t.id}
+                  aria-label={`Go to ${t.name}`}
+                  onClick={() => emblaApi?.scrollTo(i)}
+                  className={cn(
+                    "h-2 rounded-full transition-all",
+                    i === selected ? "w-8 bg-accent" : "w-2 bg-white/25 hover:bg-white/45",
+                  )}
+                />
+              ))}
+            </div>
             <div className="flex flex-wrap justify-center gap-3">
-              <Button
-                size="lg"
-                onClick={() =>
-                        router.push(
-                          `/editor/new?templateId=${encodeURIComponent(current.id)}&mode=manual&source=example`,
-                        )
-                }
-              >
-                <PenLine className="h-4 w-4" /> Use {current.name}
+              <Button size="lg" asChild>
+                <Link href={editorUrl(current.id)}>
+                  <PenLine className="h-4 w-4" /> Use {current.name}
+                </Link>
               </Button>
-              <Button size="lg" variant="secondary" onClick={() => router.push(`/match/${current.id}`)}>
-                <Sparkles className="h-4 w-4" /> Build with AI
+              <Button size="lg" variant="secondary" asChild>
+                <Link href={`/match/${current.id}`}>
+                  <Sparkles className="h-4 w-4" /> Build with AI
+                </Link>
               </Button>
             </div>
-          )}
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {active && (
-          <Dialog open onOpenChange={() => setActive(null)}>
-            <DialogContent className="border-border bg-card p-0">
-              <div className="grid gap-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                <motion.div layoutId={`card-${active.id}`} className="bg-desk p-4 sm:p-6 lg:p-8">
-                  <div className="mx-auto w-full max-w-[480px]">
-                    <TemplateThumbnail slug={active.slug} name={active.name} eager showLabel />
-                  </div>
-                </motion.div>
-                <div className="flex flex-col justify-between gap-6 border-t border-border p-5 sm:p-7 lg:border-l lg:border-t-0 lg:p-9">
-                  <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Example layout
-                  </p>
-                    <DialogTitle className="mt-2 break-words font-display text-2xl tracking-tight sm:text-3xl md:text-4xl">
-                      {active.name}
-                    </DialogTitle>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {active.atsSafe && <Badge variant="accent">ATS-Safe</Badge>}
-                      <Badge variant="outline">{active.category}</Badge>
-                    </div>
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-[15px]">
-                      {active.description}
-                    </p>
-                    <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
-                      <li>• This preview is the real {active.name} layout, with labeled example content</li>
-                      <li>• Opening it keeps this layout and this example, so you can edit what you see</li>
-                      <li>• Swap in your career profile, or download PDF / .tex when you&apos;re ready</li>
-                    </ul>
-                  </div>
-                  <div className="grid gap-3 pb-1">
-                    <Button
-                      size="lg"
-                      className="w-full"
-                      onClick={() => {
-                        setActive(null);
-                        router.push(
-                          `/editor/new?templateId=${encodeURIComponent(active.id)}&mode=manual&source=example`,
-                        );
-                      }}
-                    >
-                      <PenLine className="h-4 w-4" /> Use this template
-                    </Button>
-                    <Button
-                      size="lg"
-                      variant="secondary"
-                      className="w-full"
-                      onClick={() => {
-                        setActive(null);
-                        router.push(`/match/${active.id}`);
-                      }}
-                    >
-                      <Sparkles className="h-4 w-4" /> Build with AI
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }

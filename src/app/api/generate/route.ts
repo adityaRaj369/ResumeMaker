@@ -112,7 +112,7 @@ export async function POST(request: Request) {
               }
             },
           }),
-          timeout(90_000, "AI generation timed out") as Promise<never>,
+          timeout(120_000, "AI generation timed out") as Promise<never>,
         ]);
 
         await prisma.resume.update({

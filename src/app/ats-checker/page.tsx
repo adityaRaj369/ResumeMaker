@@ -6,7 +6,7 @@ import { MarketingHeader } from "@/components/marketing-header";
 export const metadata: Metadata = {
   title: "Free ATS Resume Score Checker",
   description:
-    "Paste any job description and resume plain text for an ATS-style match score — keyword coverage, must-have gaps, and formatting checks. No account required.",
+    "Upload a resume PDF or paste text, then score it against a job description — keyword coverage, must-have gaps, and formatting checks. No account required.",
   alternates: { canonical: "/ats-checker" },
   openGraph: {
     title: "Free ATS Resume Score Checker | ResumeForge",

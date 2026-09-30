@@ -50,12 +50,12 @@ export default async function TemplateDetailPage({ params }: Props) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <MarketingHeader googleConfigured={googleConfigured} demoConfigured={demoConfigured} />
       <main className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-10 sm:px-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-2xl border border-border bg-desk p-4 shadow-sm sm:p-6">
+        <div className="desk-wood rounded-3xl border border-black/20 p-4 shadow-[0_24px_50px_-24px_rgba(0,0,0,0.55)] sm:p-6">
           <TemplateThumbnail slug={template.slug} name={template.name} eager showLabel />
         </div>
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-accent">Real LaTeX template</p>
-          <h1 className="mt-2 font-display text-4xl tracking-tight md:text-5xl">{template.name}</h1>
+          <p className="eyebrow">Real LaTeX template</p>
+          <h1 className="mt-4 font-display text-4xl md:text-5xl">{template.name}</h1>
           <div className="mt-4 flex flex-wrap gap-2">
             {template.atsSafe && <Badge variant="accent">ATS-Safe</Badge>}
             <Badge variant="outline">{template.category}</Badge>

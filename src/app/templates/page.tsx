@@ -24,8 +24,8 @@ export default async function TemplatesIndexPage() {
     <div className="min-h-screen bg-background text-foreground">
       <MarketingHeader googleConfigured={googleConfigured} demoConfigured={demoConfigured} />
       <main className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-8">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-accent">Template library</p>
-        <h1 className="mt-2 font-display text-4xl tracking-tight md:text-5xl">
+        <p className="eyebrow">Template library</p>
+        <h1 className="mt-4 font-display text-4xl md:text-5xl">
           Real LaTeX resume templates
         </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -37,12 +37,12 @@ export default async function TemplatesIndexPage() {
             <Link
               key={template.id}
               href={`/templates/${template.slug}`}
-              className="group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group overflow-hidden rounded-3xl border border-border bg-card shadow-[0_18px_40px_-24px_rgba(28,20,16,0.45)] transition hover:-translate-y-1 hover:shadow-[0_22px_48px_-20px_rgba(196,92,38,0.35)]"
             >
               <TemplateThumbnail
                 slug={template.slug}
                 name={template.name}
-                className="border-b border-border bg-desk"
+                className="border-b border-border desk-wood"
               />
               <div className="p-4">
                 <div className="font-display text-xl">{template.name}</div>
@@ -67,7 +67,7 @@ export default async function TemplatesIndexPage() {
             </SignInButton>
           </Suspense>
           <Button size="lg" variant="outline" asChild>
-            <Link href="/ats-checker">Score an existing resume (paste text)</Link>
+            <Link href="/ats-checker">Score an existing resume (PDF or text)</Link>
           </Button>
         </div>
       </main>

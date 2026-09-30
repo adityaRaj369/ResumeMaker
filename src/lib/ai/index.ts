@@ -12,15 +12,18 @@ export type AiProviderId = "gemini" | "openai" | "grok" | "mock";
  */
 export function getAIProvider(): AIProvider {
   const name = (process.env.AI_PROVIDER || "").toLowerCase();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const grokKey = process.env.GROK_API_KEY?.trim();
   try {
     if (name === "mock") return createMockProvider();
-    if (name === "gemini" && process.env.GEMINI_API_KEY) return createGeminiProvider();
-    if (name === "openai" && process.env.OPENAI_API_KEY) return createOpenAIProvider();
-    if (name === "grok" && process.env.GROK_API_KEY) return createGrokProvider();
+    if (name === "gemini" && geminiKey) return createGeminiProvider();
+    if (name === "openai" && openaiKey) return createOpenAIProvider();
+    if (name === "grok" && grokKey) return createGrokProvider();
 
-    if (process.env.GEMINI_API_KEY) return createGeminiProvider();
-    if (process.env.OPENAI_API_KEY) return createOpenAIProvider();
-    if (process.env.GROK_API_KEY) return createGrokProvider();
+    if (geminiKey) return createGeminiProvider();
+    if (openaiKey) return createOpenAIProvider();
+    if (grokKey) return createGrokProvider();
   } catch (error) {
     throw new Error(
       `AI provider initialization failed: ${error instanceof Error ? error.message : "unknown error"}`,

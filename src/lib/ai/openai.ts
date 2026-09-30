@@ -1,12 +1,7 @@
 import OpenAI from "openai";
+import { coerceJdAnalysis, coerceRewriteResult, parseModelJson } from "@/lib/ai/parse";
 import type { AIProvider } from "@/lib/ai/provider";
 import { ANALYZE_SYSTEM_PROMPT, REWRITE_SYSTEM_PROMPT } from "@/lib/ai/provider";
-import type { JdAnalysis, RewriteResult } from "@/lib/types";
-
-function parseJson<T>(raw: string): T {
-  const cleaned = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-  return JSON.parse(cleaned) as T;
-}
 
 function clientFor(kind: "openai" | "grok") {
   if (kind === "grok") {
@@ -37,11 +32,12 @@ export function createOpenAIProvider(): AIProvider {
   return {
     id: "openai",
     async analyzeJobDescription(jd) {
-      return parseJson<JdAnalysis>(await complete(client, model, ANALYZE_SYSTEM_PROMPT, jd));
+      return coerceJdAnalysis(parseModelJson(await complete(client, model, ANALYZE_SYSTEM_PROMPT, jd)));
     },
     async rewriteResume(input) {
-      return parseJson<RewriteResult>(
-        await complete(client, model, REWRITE_SYSTEM_PROMPT, JSON.stringify(input)),
+      return coerceRewriteResult(
+        parseModelJson(await complete(client, model, REWRITE_SYSTEM_PROMPT, JSON.stringify(input))),
+        input.profile,
       );
     },
   };
@@ -53,11 +49,12 @@ export function createGrokProvider(): AIProvider {
   return {
     id: "grok",
     async analyzeJobDescription(jd) {
-      return parseJson<JdAnalysis>(await complete(client, model, ANALYZE_SYSTEM_PROMPT, jd));
+      return coerceJdAnalysis(parseModelJson(await complete(client, model, ANALYZE_SYSTEM_PROMPT, jd)));
     },
     async rewriteResume(input) {
-      return parseJson<RewriteResult>(
-        await complete(client, model, REWRITE_SYSTEM_PROMPT, JSON.stringify(input)),
+      return coerceRewriteResult(
+        parseModelJson(await complete(client, model, REWRITE_SYSTEM_PROMPT, JSON.stringify(input))),
+        input.profile,
       );
     },
   };

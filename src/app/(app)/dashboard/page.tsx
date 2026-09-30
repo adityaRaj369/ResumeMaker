@@ -74,8 +74,8 @@ export default function DashboardPage() {
     <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-8">
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Library</p>
-          <h1 className="mt-2 font-display text-4xl">Saved resumes</h1>
+          <p className="eyebrow">Library</p>
+          <h1 className="mt-4 font-display text-4xl">Saved resumes</h1>
         </div>
         <Button asChild>
           <Link href="/gallery">New from template</Link>
@@ -108,7 +108,7 @@ export default function DashboardPage() {
           }) => (
           <div
             key={resume.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 transition hover:border-accent/40"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border bg-card/80 p-5 shadow-[0_16px_32px_-24px_rgba(28,20,16,0.4)] transition hover:border-accent/40"
           >
             <Link
               href={`/editor/${resume.id}`}

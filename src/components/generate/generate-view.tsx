@@ -140,10 +140,10 @@ export function GenerateView({ resumeId, jobId }: { resumeId: string; jobId: str
   const ring = score?.score ?? 0;
 
   return (
-    <div className="relative min-h-[calc(100vh-56px)] overflow-hidden px-6 py-8 sm:px-8">
+    <div className="relative min-h-[calc(100vh-64px)] overflow-hidden px-6 py-8 sm:px-8">
       <div className="relative z-10 mx-auto w-full max-w-6xl">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Generation pipeline</p>
-        <h1 className="mt-2 font-display text-4xl">Tailoring without inventing.</h1>
+        <p className="eyebrow">Generation pipeline</p>
+        <h1 className="mt-4 font-display text-4xl">Tailoring without inventing.</h1>
 
         {provider === "mock" ? (
           <div className="mt-6 rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">

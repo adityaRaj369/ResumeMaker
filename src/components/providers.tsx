@@ -20,9 +20,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={client}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
+          defaultTheme="dark"
           enableSystem={false}
-          storageKey="resumeforge-theme"
+          storageKey="resumeforge-theme-v2"
           disableTransitionOnChange
         >
           {children}

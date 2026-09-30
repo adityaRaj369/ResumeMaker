@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 export function SignInButton({
   callbackUrl,
-  children = "Sign in",
+  children = "Continue with demo",
   className,
   size = "default",
   variant = "default",

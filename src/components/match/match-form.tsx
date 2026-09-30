@@ -144,8 +144,8 @@ export function MatchForm({ templateId }: { templateId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 sm:px-8">
-      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">AI path</p>
-      <h1 className="mt-2 font-display text-4xl">
+      <p className="eyebrow">AI path</p>
+      <h1 className="mt-4 font-display text-4xl">
         Build {template?.name ? template.name : "this template"} with your profile
       </h1>
 

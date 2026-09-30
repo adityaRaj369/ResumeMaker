@@ -236,7 +236,7 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
 
   if (isLoading || !resume || !draft) {
     return (
-      <div className="grid min-h-[calc(100dvh-56px)] place-items-center px-4 text-sm text-muted-foreground">
+      <div className="grid min-h-[calc(100dvh-64px)] place-items-center px-4 text-sm text-muted-foreground">
         {isError ? (error as Error)?.message || "Could not open this resume" : "Opening editor…"}
       </div>
     );
@@ -300,7 +300,7 @@ export function ResumeEditor({ resumeId }: { resumeId: string }) {
   );
 
   return (
-    <div className="flex h-[calc(100dvh-56px)] flex-col bg-background">
+    <div className="flex h-[calc(100dvh-64px)] flex-col bg-background">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 sm:gap-3 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Input
