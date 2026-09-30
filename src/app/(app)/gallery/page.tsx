@@ -10,5 +10,17 @@ export const metadata: Metadata = {
 
 export default async function GalleryPage() {
   const templates = await listPublishedTemplates();
-  return <TemplateGallery initialTemplates={templates} />;
+  return (
+    <TemplateGallery
+      initialTemplates={templates.map((template) => ({
+        id: template.id,
+        slug: template.slug,
+        name: template.name,
+        category: template.category,
+        description: template.description ?? "",
+        thumbnailUrl: template.thumbnailUrl,
+        atsSafe: template.atsSafe,
+      }))}
+    />
+  );
 }

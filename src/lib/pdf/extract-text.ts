@@ -5,9 +5,8 @@ export async function extractPdfText(bytes: Uint8Array): Promise<string> {
   const pdf = await getDocumentProxy(bytes);
   const result = await extractText(pdf, { mergePages: true });
   const raw = result.text;
-  const pages: string[] = Array.isArray(raw) ? raw.map(String) : [String(raw ?? "")];
-  const limited = pages.slice(0, MAX_PDF_PAGES).join("\n\n");
-  return normalizeExtractedText(limited);
+  const text = Array.isArray(raw) ? raw.slice(0, MAX_PDF_PAGES).join("\n\n") : String(raw ?? "");
+  return normalizeExtractedText(text);
 }
 
 export async function extractTextFromUpload(file: File): Promise<string> {
