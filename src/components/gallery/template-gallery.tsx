@@ -16,7 +16,7 @@ type Template = {
   slug: string;
   name: string;
   category: string;
-  description: string;
+  description: string | null;
   thumbnailUrl: string;
   atsSafe: boolean;
 };
